@@ -64,6 +64,7 @@ inclusion: always
 8. session 字符串硬编码、不带时区参数
 9. 信号逻辑用 `close`（当前可能未收盘）而不是 `close[1]`
 10. `var int xxxBarIdx = 0` 然后直接和 `bar_index` 比较——区分不开"未设置"和"bar 0"
+11. 多行表达式续行缩进列数是 **4 的倍数**（4/8/12/16/20/24/28…）→ Pine 解析器视为新代码块起始，报 `Syntax error at input 'end of line without line continuation'`。安全做法：单行书写，或续行用非 4 倍数缩进（如 2/6/9/10 空格）
 
 ## 交付时必须输出（每一项都不许省）
 
