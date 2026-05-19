@@ -1,13 +1,3 @@
-// EMA PA - Brooks (信号锁版本)
-//
-// v1.1 修复（2026-05）：
-//   - Bug1: 同一持仓内连续触发同向（甚至反向）信号 → 引入 positionState 状态机门控，
-//           只有当 SL 或目标 TP 命中后 positionState 归 0，才允许下一根信号通过。
-//   - Bug2: activeBuyTP1 / activeBuyTP2 仅在 showTP=true 时才赋值，关闭显示开关会导致
-//           状态机失去 TP 退出条件 → 把 TP 价位计算从 if showTP 块中提到外层，永远计算。
-//   - Bug3: 反向信号在持仓中也会触发并覆盖 active SL / TP，等同"自动反手" → 由 Bug1 的
-//           positionState 门控顺带解决。
-//
 //@version=5
 indicator("EMA PA - Brooks", overlay=true, max_labels_count=500, max_lines_count=500)
 
@@ -19,14 +9,12 @@ f_ma(src, len, type) =>
         "RMA" => ta.rma(src, len)
         => ta.ema(src, len)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 1. Inputs
-// ══════════════════════════════════════════════════════════════════════════════
 gr0 = "Pullback Logic"
 pbLookback  = input.int(10,    "回调回溯周期",          minval=2, group=gr0)
 slopeFilter = input.bool(true, "均线斜率过滤",                    group=gr0)
 strictPA    = input.bool(true, "严格 K 线质量过滤",               group=gr0)
 maxSignals  = input.int(3,     "最近显示信号组数",       minval=1, group=gr0)
+lockTimeout = input.int(30,    "信号锁超时(K线数)",      minval=5, group=gr0, tooltip="持仓后超过N根K线未触发SL则自动解锁")
 
 gr1 = "Moving Average Settings"
 maType  = input.string("EMA", "MA Type", options=["SMA","EMA","WMA","RMA"], group=gr1)
@@ -48,9 +36,6 @@ midLow      = input.float(0.35,          "区间中部下界",             step=
 midHigh     = input.float(0.65,          "区间中部上界",             step=0.05, group=grMC)
 showContext = input.bool(true,           "显示市场状态标签",         group=grMC)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 2. Market Cycle 上下文
-// ══════════════════════════════════════════════════════════════════════════════
 atr = ta.atr(atrLen)
 emaSpreadOk     = math.abs(ema1 - ema2) > atr * minSepAtr
 recentHigh      = ta.highest(high, rangeLen)
@@ -73,9 +58,6 @@ if showContext and barstate.islast
                text_color=color.white,
                bgcolor=marketCycleOk ? color.new(color.green, 30) : color.new(color.red, 30))
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 3. K 线质量
-// ══════════════════════════════════════════════════════════════════════════════
 barRange   = high - low
 bodySize   = math.abs(close - open)
 upperTail  = high - math.max(close, open)
@@ -93,9 +75,6 @@ qualityBearEntry = validRange and bodySize > barRange * 0.4 and lowerTail < body
 isBullEntry = strictPA ? (close > open and qualityBullEntry) : (close > open)
 isBearEntry = strictPA ? (close < open and qualityBearEntry) : (close < open)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 4. EMA 接触与回调
-// ══════════════════════════════════════════════════════════════════════════════
 emaUp   = slopeFilter ? ema1 > ema1[1] : true
 emaDown = slopeFilter ? ema1 < ema1[1] : true
 
@@ -114,20 +93,23 @@ emaContactSell = emaInteractionSell or (priorTouchSell and close < ema1)
 isSignalBarBuy  = marketCycleOk and (ema1 > ema2) and emaUp   and emaContactBuy  and isBullSignalBar
 isSignalBarSell = marketCycleOk and (ema1 < ema2) and emaDown and emaContactSell and isBearSignalBar
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 5. 原始信号 (raw) — 不含状态门控
-// ══════════════════════════════════════════════════════════════════════════════
-confirmed     = barstate.isconfirmed
+confirmed  = barstate.isconfirmed
 buySignalRaw  = confirmed and isSignalBarBuy[1]  and close > high[1] and isBullEntry
 sellSignalRaw = confirmed and isSignalBarSell[1] and close < low[1]  and isBearEntry
 
+var int positionState = 0
+var int posEntryBar   = na
+
+buySignal  = buySignalRaw  and positionState == 0
+sellSignal = sellSignalRaw and positionState == 0
+
 // ══════════════════════════════════════════════════════════════════════════════
-// 6. 止损 inputs
+// 10. 止损逻辑 ✅ 新增 showSL 开关
 // ══════════════════════════════════════════════════════════════════════════════
 grSL = "Stop Loss"
 stopMode          = input.string("Signal Bar", "Stop Mode", options=["Signal Bar","Entry Bar","Swing Pivot"], group=grSL)
 swingStopLookback = input.int(5, "Swing Pivot Lookback", minval=2, group=grSL)
-showSL            = input.bool(true, "显示止损线", group=grSL)
+showSL            = input.bool(true, "显示止损线", group=grSL)  // ✅ 新增
 
 swingBuyStop  = ta.lowest(low,   swingStopLookback)
 swingSellStop = ta.highest(high, swingStopLookback)
@@ -135,16 +117,19 @@ swingSellStop = ta.highest(high, swingStopLookback)
 buySLPrice  = stopMode == "Signal Bar" ? low[1]  : stopMode == "Entry Bar" ? low  : swingBuyStop
 sellSLPrice = stopMode == "Signal Bar" ? high[1] : stopMode == "Entry Bar" ? high : swingSellStop
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 7. 止盈 inputs
-// ══════════════════════════════════════════════════════════════════════════════
-grTP        = "Take Profit Levels (Latest Signal Only)"
-showTP      = input.bool(true,  "显示止盈线",                                      group=grTP)
-exitTpLevel = input.string("2R", "完全止盈目标 (信号锁解锁条件)", options=["1R","2R"], group=grTP, tooltip="持仓后必须 SL 或此目标 TP 命中，才会解锁下一笔信号")
-tp1Col      = input.color(color.new(color.teal, 0), "1R 颜色",                     group=grTP)
-tp2Col      = input.color(color.new(color.blue, 0), "2R 颜色",                     group=grTP)
-tpWidth     = input.int(2,      "线条宽度",   minval=1, maxval=4,                  group=grTP)
-tpStyle     = input.string("Solid", "线条样式", options=["Solid","Dashed","Dotted"], group=grTP)
+var float activeBuySL    = na
+var float activeSellSL   = na
+var int   activeBuySLBar = na
+var int   activeSellSLBar= na
+var line  buySLLine      = na
+var line  sellSLLine     = na
+
+grTP    = "Take Profit Levels (Latest Signal Only)"
+showTP  = input.bool(true,  "显示止盈线",                                   group=grTP)
+tp1Col  = input.color(color.new(color.teal, 0), "1R 颜色",                  group=grTP)
+tp2Col  = input.color(color.new(color.blue, 0), "2R 颜色",                  group=grTP)
+tpWidth = input.int(2,      "线条宽度",   minval=1, maxval=4,               group=grTP)
+tpStyle = input.string("Solid", "线条样式", options=["Solid","Dashed","Dotted"], group=grTP)
 
 f_tpStyle(s) =>
     switch s
@@ -153,24 +138,6 @@ f_tpStyle(s) =>
         "Dotted" => line.style_dotted
         =>          line.style_dashed
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 8. 全局状态变量
-// ══════════════════════════════════════════════════════════════════════════════
-// 信号锁：持仓状态机
-//   0  = Flat   空仓，允许新信号
-//   1  = Long   持多，所有 buy/sell 信号被门控吞掉
-//  -1  = Short  持空，所有 buy/sell 信号被门控吞掉
-var int positionState = 0
-
-// SL 状态
-var float activeBuySL    = na
-var float activeSellSL   = na
-var int   activeBuySLBar = na
-var int   activeSellSLBar= na
-var line  buySLLine      = na
-var line  sellSLLine     = na
-
-// TP 状态（数值始终计算，绘制由 showTP 控制）
 var float activeBuyTP1  = na
 var float activeBuyTP2  = na
 var float activeSellTP1 = na
@@ -193,49 +160,46 @@ f_deleteTPLabel(lb) =>
         label.delete(lb)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 9. 门控信号 — 真正对外的 buy/sell
-// ══════════════════════════════════════════════════════════════════════════════
-buySignal  = buySignalRaw  and positionState == 0
-sellSignal = sellSignalRaw and positionState == 0
-
-// ══════════════════════════════════════════════════════════════════════════════
-// 10. 入场处理
+// 12. 信号触发 ✅ 止损线创建改为条件创建
 // ══════════════════════════════════════════════════════════════════════════════
 if buySignal
-    positionState   := 1
-    activeBuySL     := buySLPrice
-    activeBuySLBar  := bar_index
-    activeSellSL    := na
-    activeSellSLBar := na
+    positionState  := 1
+    posEntryBar    := bar_index
+    activeBuySL    := buySLPrice
+    activeBuySLBar := bar_index
+    activeSellSL   := na
+    activeSellSLBar:= na
+    // ✅ showSL 控制是否创建线条，na 时延伸逻辑自动跳过
     buySLLine := showSL ? line.new(bar_index, activeBuySL, bar_index + 1, activeBuySL, color=color.red, width=1) : na
 
-    // 清旧 TP 对象（双向，避免幽灵线）
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    buyTP1Line   := na
-    buyTP2Line   := na
-    sellTP1Line  := na
-    sellTP2Line  := na
-    buyTP1Label  := na
-    buyTP2Label  := na
-    sellTP1Label := na
-    sellTP2Label := na
-    activeSellTP1 := na
-    activeSellTP2 := na
-
-    // 计算 TP 价位（独立于 showTP，状态机要用）
-    float entryBuy = high[1]
-    float riskBuy  = entryBuy - buySLPrice
-    activeBuyTP1 := entryBuy + riskBuy
-    activeBuyTP2 := entryBuy + riskBuy * 2.0
-
     if showTP
+        f_deleteTPLine(buyTP1Line)
+        f_deleteTPLine(buyTP2Line)
+        f_deleteTPLine(sellTP1Line)
+        f_deleteTPLine(sellTP2Line)
+        f_deleteTPLabel(buyTP1Label)
+        f_deleteTPLabel(buyTP2Label)
+        f_deleteTPLabel(sellTP1Label)
+        f_deleteTPLabel(sellTP2Label)
+        activeBuyTP1  := na
+        activeBuyTP2  := na
+        activeSellTP1 := na
+        activeSellTP2 := na
+        buyTP1Line    := na
+        buyTP2Line    := na
+        sellTP1Line   := na
+        sellTP2Line   := na
+        buyTP1Label   := na
+        buyTP2Label   := na
+        sellTP1Label  := na
+        sellTP2Label  := na
+
+        float entryBuy = high[1]
+        float riskBuy  = entryBuy - buySLPrice
+
+        activeBuyTP1 := entryBuy + riskBuy
+        activeBuyTP2 := entryBuy + riskBuy * 2.0
+
         buyTP1Line  := line.new(bar_index, activeBuyTP1, bar_index + 1, activeBuyTP1,
                                  color=tp1Col, width=tpWidth, style=f_tpStyle(tpStyle))
         buyTP2Line  := line.new(bar_index, activeBuyTP2, bar_index + 1, activeBuyTP2,
@@ -248,38 +212,43 @@ if buySignal
                                   size=size.small, yloc=yloc.price)
 
 if sellSignal
-    positionState   := -1
-    activeSellSL    := sellSLPrice
-    activeSellSLBar := bar_index
-    activeBuySL     := na
-    activeBuySLBar  := na
+    positionState  := -1
+    posEntryBar    := bar_index
+    activeSellSL   := sellSLPrice
+    activeSellSLBar:= bar_index
+    activeBuySL    := na
+    activeBuySLBar := na
+    // ✅ showSL 控制是否创建线条
     sellSLLine := showSL ? line.new(bar_index, activeSellSL, bar_index + 1, activeSellSL, color=color.red, width=1) : na
 
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    buyTP1Line   := na
-    buyTP2Line   := na
-    sellTP1Line  := na
-    sellTP2Line  := na
-    buyTP1Label  := na
-    buyTP2Label  := na
-    sellTP1Label := na
-    sellTP2Label := na
-    activeBuyTP1 := na
-    activeBuyTP2 := na
-
-    float entrySell = low[1]
-    float riskSell  = sellSLPrice - entrySell
-    activeSellTP1 := entrySell - riskSell
-    activeSellTP2 := entrySell - riskSell * 2.0
-
     if showTP
+        f_deleteTPLine(buyTP1Line)
+        f_deleteTPLine(buyTP2Line)
+        f_deleteTPLine(sellTP1Line)
+        f_deleteTPLine(sellTP2Line)
+        f_deleteTPLabel(buyTP1Label)
+        f_deleteTPLabel(buyTP2Label)
+        f_deleteTPLabel(sellTP1Label)
+        f_deleteTPLabel(sellTP2Label)
+        activeBuyTP1  := na
+        activeBuyTP2  := na
+        activeSellTP1 := na
+        activeSellTP2 := na
+        buyTP1Line    := na
+        buyTP2Line    := na
+        sellTP1Line   := na
+        sellTP2Line   := na
+        buyTP1Label   := na
+        buyTP2Label   := na
+        sellTP1Label  := na
+        sellTP2Label  := na
+
+        float entrySell = low[1]
+        float riskSell  = sellSLPrice - entrySell
+
+        activeSellTP1 := entrySell - riskSell
+        activeSellTP2 := entrySell - riskSell * 2.0
+
         sellTP1Line  := line.new(bar_index, activeSellTP1, bar_index + 1, activeSellTP1,
                                   color=tp1Col, width=tpWidth, style=f_tpStyle(tpStyle))
         sellTP2Line  := line.new(bar_index, activeSellTP2, bar_index + 1, activeSellTP2,
@@ -291,9 +260,6 @@ if sellSignal
                                    style=label.style_none, textcolor=tp2Col,
                                    size=size.small, yloc=yloc.price)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 11. 持仓中：延伸线条 + 出场检测
-// ══════════════════════════════════════════════════════════════════════════════
 if not na(activeBuySL)  and not na(buySLLine)
     line.set_x2(buySLLine,  bar_index)
 if not na(activeSellSL) and not na(sellSLLine)
@@ -309,118 +275,96 @@ if showTP
     if not na(activeSellTP2) and not na(sellTP2Line)
         line.set_x2(sellTP2Line, bar_index)
 
-// 出场目标（按 input 选择 1R 或 2R 作为完全止盈位）
-buyExitTP  = exitTpLevel == "1R" ? activeBuyTP1  : activeBuyTP2
-sellExitTP = exitTpLevel == "1R" ? activeSellTP1 : activeSellTP2
+buyStopCanTrigger  = not na(activeBuySLBar)  and bar_index > activeBuySLBar
+sellStopCanTrigger = not na(activeSellSLBar) and bar_index > activeSellSLBar
 
-buyStopCanTrigger  = positionState == 1  and not na(activeBuySLBar)  and bar_index > activeBuySLBar
-sellStopCanTrigger = positionState == -1 and not na(activeSellSLBar) and bar_index > activeSellSLBar
-
-// --- 多头：先 SL 后 TP（同根穿越按最坏假设） ---
 if buyStopCanTrigger and not na(activeBuySL) and low <= activeBuySL
     positionState  := 0
+    posEntryBar    := na
     activeBuySL    := na
     activeBuySLBar := na
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    activeBuyTP1  := na
-    activeBuyTP2  := na
-    activeSellTP1 := na
-    activeSellTP2 := na
-    buyTP1Line    := na
-    buyTP2Line    := na
-    sellTP1Line   := na
-    sellTP2Line   := na
-    buyTP1Label   := na
-    buyTP2Label   := na
-    sellTP1Label  := na
-    sellTP2Label  := na
+    if showTP
+        f_deleteTPLine(buyTP1Line)
+        f_deleteTPLine(buyTP2Line)
+        f_deleteTPLine(sellTP1Line)
+        f_deleteTPLine(sellTP2Line)
+        f_deleteTPLabel(buyTP1Label)
+        f_deleteTPLabel(buyTP2Label)
+        f_deleteTPLabel(sellTP1Label)
+        f_deleteTPLabel(sellTP2Label)
+        activeBuyTP1  := na
+        activeBuyTP2  := na
+        activeSellTP1 := na
+        activeSellTP2 := na
+        buyTP1Line    := na
+        buyTP2Line    := na
+        sellTP1Line   := na
+        sellTP2Line   := na
+        buyTP1Label   := na
+        buyTP2Label   := na
+        sellTP1Label  := na
+        sellTP2Label  := na
 
-if buyStopCanTrigger and positionState == 1 and not na(buyExitTP) and high >= buyExitTP
-    positionState  := 0
-    activeBuySL    := na
-    activeBuySLBar := na
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    activeBuyTP1  := na
-    activeBuyTP2  := na
-    activeSellTP1 := na
-    activeSellTP2 := na
-    buyTP1Line    := na
-    buyTP2Line    := na
-    sellTP1Line   := na
-    sellTP2Line   := na
-    buyTP1Label   := na
-    buyTP2Label   := na
-    sellTP1Label  := na
-    sellTP2Label  := na
-
-// --- 空头：先 SL 后 TP ---
 if sellStopCanTrigger and not na(activeSellSL) and high >= activeSellSL
-    positionState   := 0
-    activeSellSL    := na
-    activeSellSLBar := na
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    activeBuyTP1  := na
-    activeBuyTP2  := na
-    activeSellTP1 := na
-    activeSellTP2 := na
-    buyTP1Line    := na
-    buyTP2Line    := na
-    sellTP1Line   := na
-    sellTP2Line   := na
-    buyTP1Label   := na
-    buyTP2Label   := na
-    sellTP1Label  := na
-    sellTP2Label  := na
+    positionState  := 0
+    posEntryBar    := na
+    activeSellSL   := na
+    activeSellSLBar:= na
+    if showTP
+        f_deleteTPLine(buyTP1Line)
+        f_deleteTPLine(buyTP2Line)
+        f_deleteTPLine(sellTP1Line)
+        f_deleteTPLine(sellTP2Line)
+        f_deleteTPLabel(buyTP1Label)
+        f_deleteTPLabel(buyTP2Label)
+        f_deleteTPLabel(sellTP1Label)
+        f_deleteTPLabel(sellTP2Label)
+        activeBuyTP1  := na
+        activeBuyTP2  := na
+        activeSellTP1 := na
+        activeSellTP2 := na
+        buyTP1Line    := na
+        buyTP2Line    := na
+        sellTP1Line   := na
+        sellTP2Line   := na
+        buyTP1Label   := na
+        buyTP2Label   := na
+        sellTP1Label  := na
+        sellTP2Label  := na
 
-if sellStopCanTrigger and positionState == -1 and not na(sellExitTP) and low <= sellExitTP
-    positionState   := 0
-    activeSellSL    := na
-    activeSellSLBar := na
-    f_deleteTPLine(buyTP1Line)
-    f_deleteTPLine(buyTP2Line)
-    f_deleteTPLine(sellTP1Line)
-    f_deleteTPLine(sellTP2Line)
-    f_deleteTPLabel(buyTP1Label)
-    f_deleteTPLabel(buyTP2Label)
-    f_deleteTPLabel(sellTP1Label)
-    f_deleteTPLabel(sellTP2Label)
-    activeBuyTP1  := na
-    activeBuyTP2  := na
-    activeSellTP1 := na
-    activeSellTP2 := na
-    buyTP1Line    := na
-    buyTP2Line    := na
-    sellTP1Line   := na
-    sellTP2Line   := na
-    buyTP1Label   := na
-    buyTP2Label   := na
-    sellTP1Label  := na
-    sellTP2Label  := na
+// 信号锁解锁：超时(D) + 反向信号(C)
+lockTimedOut = positionState != 0 and not na(posEntryBar) and (bar_index - posEntryBar) >= lockTimeout
+reverseUnlock = (positionState == 1 and sellSignalRaw) or (positionState == -1 and buySignalRaw)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 12. 信号绘制
-// ══════════════════════════════════════════════════════════════════════════════
+if lockTimedOut or reverseUnlock
+    positionState  := 0
+    posEntryBar    := na
+    activeBuySL    := na
+    activeBuySLBar := na
+    activeSellSL   := na
+    activeSellSLBar:= na
+    if showTP
+        f_deleteTPLine(buyTP1Line)
+        f_deleteTPLine(buyTP2Line)
+        f_deleteTPLine(sellTP1Line)
+        f_deleteTPLine(sellTP2Line)
+        f_deleteTPLabel(buyTP1Label)
+        f_deleteTPLabel(buyTP2Label)
+        f_deleteTPLabel(sellTP1Label)
+        f_deleteTPLabel(sellTP2Label)
+        activeBuyTP1  := na
+        activeBuyTP2  := na
+        activeSellTP1 := na
+        activeSellTP2 := na
+        buyTP1Line    := na
+        buyTP2Line    := na
+        sellTP1Line   := na
+        sellTP2Line   := na
+        buyTP1Label   := na
+        buyTP2Label   := na
+        sellTP1Label  := na
+        sellTP2Label  := na
+
 grStyle  = "Signal Styling"
 shapeOpt = input.string("圆形", "信号形状", options=["圆形","正方形","菱形","十字"], group=grStyle)
 sizeOpt  = input.string("中",   "图形大小", options=["小","中","大","巨大"],         group=grStyle)
@@ -456,20 +400,20 @@ f_addLine(ln) =>
     if array.size(allLines) > maxSignals
         line.delete(array.shift(allLines))
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 16. 对象绘制 ✅ Stop 标签和 f_addLine 加 showSL 条件
+// ══════════════════════════════════════════════════════════════════════════════
 if buySignal
     f_addLabel(label.new(bar_index, low,  get_char(shapeOpt), style=label.style_none, textcolor=bullCol, size=get_size(sizeOpt), yloc=yloc.belowbar))
-    if showSL
+    if showSL  // ✅ 仅在 showSL 开启时添加 Stop 标签和止损线
         f_addLabel(label.new(bar_index, activeBuySL, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
         f_addLine(buySLLine)
 
 if sellSignal
     f_addLabel(label.new(bar_index, high, get_char(shapeOpt), style=label.style_none, textcolor=bearCol, size=get_size(sizeOpt), yloc=yloc.abovebar))
-    if showSL
+    if showSL  // ✅ 仅在 showSL 开启时添加 Stop 标签和止损线
         f_addLabel(label.new(bar_index, activeSellSL, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
         f_addLine(sellSLLine)
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 13. 告警
-// ══════════════════════════════════════════════════════════════════════════════
 alertcondition(buySignal,  "Brooks PA Buy",  "Brooks PA Buy Signal")
 alertcondition(sellSignal, "Brooks PA Sell", "Brooks PA Sell Signal")
