@@ -1,6 +1,6 @@
 //@version=6
 // =============================================================================
-// VWAP PA - Brooks  v1.0  (2026-05)
+// VWAP PA - Brooks  v1.1  (2026-05)
 // 适用品种 : ES / XAUUSD / NQ 等流动性高的日内品种
 // 适用周期 : 1m / 5m / 15m
 // 状态     : 草稿 → 待回测验证
@@ -27,6 +27,10 @@
 //     - VWAP anchor 可选 Session / Week / Month
 //     - 信号 K 收盘即画 setup，挂单超时自动撤单
 //     - 状态机：flat → armed → filled → closed，含反向信号解锁
+//   v1.1 (2026-05): 时段过滤
+//     - 新增"交易时段过滤"：默认覆盖 亚盘开始（NY 20:00）→ 美盘早盘结束（NY 12:00）
+//     - 时区可选 NY / 上海 / 东京 / 伦敦 / 品种所在交易所
+//     - 时段外不识别信号（已挂单仍可正常触发 / 撤单 / 出场）
 // =============================================================================
 
 indicator("VWAP PA - Brooks", overlay=true,
@@ -95,6 +99,21 @@ bearCol  = input.color (color.red,   "Sell Color", group=gr5)
 
 grPanel = "Info Panel"
 showPanel = input.bool(true, "显示状态面板", group=grPanel)
+
+gr6 = "Trading Hours Filter"
+sessionFilter = input.bool   (true,
+     "启用时段过滤",
+     group=gr6,
+     tooltip="只在指定时段内识别新信号；时段外仍允许已挂单触发、出场、撤单")
+sessionStr    = input.session("2000-1200:1234567",
+     "交易时段",
+     group=gr6,
+     tooltip="格式 HHMM-HHMM:工作日（1=周日 ... 7=周六）。默认 NY 20:00 → 次日 12:00 ≈ 亚盘开始 → 美盘早盘结束")
+sessionTzOpt  = input.string ("America/New_York",
+     "时段时区",
+     options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"],
+     group=gr6,
+     tooltip="选 'exchange' 则跟随品种所在交易所时区")
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Helper
@@ -183,6 +202,10 @@ priorSellContact = not na(barsSinceHighAbove) and barsSinceHighAbove >= 1 and ba
 vwapContactBuy  = buyContactNow  or priorBuyContact
 vwapContactSell = sellContactNow or priorSellContact
 
+// 7.3 交易时段过滤（默认 NY 20:00 → 次日 12:00，覆盖亚盘开始到美盘早盘结束）
+sessionTz = sessionTzOpt == "exchange" ? syminfo.timezone : sessionTzOpt
+inSession = sessionFilter ? not na(time(timeframe.period, sessionStr, sessionTz)) : true
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. Signal detection
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,9 +229,9 @@ var float tp1Price      = na
 var float tp2Price      = na
 var bool  isFilled      = false
 
-// 仅 confirmed bar 触发新信号；要求当前为 flat 状态
-buySig  = confirmed and isSignalBarBuy  and positionState == 0
-sellSig = confirmed and isSignalBarSell and positionState == 0
+// 仅 confirmed bar 触发新信号；要求当前为 flat 状态 + 在交易时段内
+buySig  = confirmed and isSignalBarBuy  and positionState == 0 and inSession
+sellSig = confirmed and isSignalBarSell and positionState == 0 and inSession
 
 // Stop 计算源
 swingBuyStop  = ta.lowest (low,  swingLook)
@@ -419,12 +442,17 @@ stateText  = f_stateText()
 stateColor = f_stateColor()
 trendText  = f_trendText()
 
-var table panel = table.new(position.top_right, 2, 3, border_width=1)
+sessionText  = sessionFilter ? (inSession ? "IN session" : "OUT of session") : "Filter OFF"
+sessionColor = sessionFilter ? (inSession ? color.new(color.green, 30) : color.new(color.maroon, 30)) : color.new(color.gray, 30)
+
+var table panel = table.new(position.top_right, 2, 4, border_width=1)
 if showPanel and barstate.islast
     table.cell(panel, 0, 0, "Trend", text_color=color.white, bgcolor=color.new(color.gray, 50))
     table.cell(panel, 1, 0, trendText, text_color=color.white, bgcolor=color.new(color.gray, 30))
     table.cell(panel, 0, 1, "State", text_color=color.white, bgcolor=color.new(color.gray, 50))
     table.cell(panel, 1, 1, stateText, text_color=color.white, bgcolor=stateColor)
-    table.cell(panel, 0, 2, "Slope/ATR", text_color=color.white, bgcolor=color.new(color.gray, 50))
-    table.cell(panel, 1, 2, str.tostring(vwapSlopeRaw, "#.###"),
+    table.cell(panel, 0, 2, "Session", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(panel, 1, 2, sessionText, text_color=color.white, bgcolor=sessionColor)
+    table.cell(panel, 0, 3, "Slope/ATR", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(panel, 1, 3, str.tostring(vwapSlopeRaw, "#.###"),
                text_color=color.white, bgcolor=color.new(color.gray, 30))
