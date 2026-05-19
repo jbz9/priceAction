@@ -1,12 +1,13 @@
 // @version=5
-// v1.0 策略回测版（2025-05）：基于 EMA_PA_Brooks indicator 信号逻辑
-// - 入场：突破信号 K 高/低 +1 tick
-// - 止损：Signal Bar 模式（信号 K 的 low/high）
-// - 止盈：2R（风险的 2 倍）
-// - 品种默认：XAUUSD
+// v1.1 策略回测版（2025-05）
+// - 修正入场：信号 K 收盘后，在信号 K 高/低 ±1 tick 挂 buy stop / sell stop
+// - 仓位：$1000 本金，单笔 5% 风险，动态计算手数
+// - 止损：Signal Bar（信号 K 的 low/high）
+// - 止盈：2R
+// - 品种：XAUUSD
 strategy("EMA PA - Brooks [Strategy]",
       overlay=true,
-      initial_capital=10000,
+      initial_capital=1000,
       default_qty_type=strategy.fixed,
       default_qty_value=1,
       commission_type=strategy.commission.cash_per_order,
@@ -47,6 +48,10 @@ minRangeAtr = input.float(1.20,          "最小区间高度 ATR 倍数",    ste
 midLow      = input.float(0.35,          "区间中部下界",             step=0.05, group=grMC)
 midHigh     = input.float(0.65,          "区间中部上界",             step=0.05, group=grMC)
 
+grRisk = "Risk Management"
+riskPct = input.float(5.0, "单笔风险 %", minval=0.5, maxval=20.0, step=0.5, group=grRisk,
+      tooltip="每笔交易最大亏损占当前权益的百分比")
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Moving Averages
 // ══════════════════════════════════════════════════════════════════════════════
@@ -84,11 +89,6 @@ qualityBearSignal = validRange and bodySize > barRange * 0.5 and lowerTail < bod
 isBullSignalBar = strictPA ? (close > open and qualityBullSignal) : (close > open)
 isBearSignalBar = strictPA ? (close < open and qualityBearSignal) : (close < open)
 
-qualityBullEntry = validRange and bodySize > barRange * 0.4 and upperTail < bodySize * 1.5 and close > midPoint
-qualityBearEntry = validRange and bodySize > barRange * 0.4 and lowerTail < bodySize * 1.5 and close < midPoint
-isBullEntry = strictPA ? (close > open and qualityBullEntry) : (close > open)
-isBearEntry = strictPA ? (close < open and qualityBearEntry) : (close < open)
-
 // ══════════════════════════════════════════════════════════════════════════════
 // EMA Slope & Contact
 // ══════════════════════════════════════════════════════════════════════════════
@@ -108,44 +108,100 @@ emaContactBuy  = emaInteractionBuy  or (priorTouchBuy  and close > ema1)
 emaContactSell = emaInteractionSell or (priorTouchSell and close < ema1)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Signal Detection
+// Signal Detection — 信号 K 识别（信号 K 收盘时确认）
 // ══════════════════════════════════════════════════════════════════════════════
 isSignalBarBuy  = marketCycleOk and (ema1 > ema2) and emaUp   and emaContactBuy  and isBullSignalBar
 isSignalBarSell = marketCycleOk and (ema1 < ema2) and emaDown and emaContactSell and isBearSignalBar
 
-confirmed  = barstate.isconfirmed
-buySignalRaw  = confirmed and isSignalBarBuy[1]  and close > high[1] and isBullEntry
-sellSignalRaw = confirmed and isSignalBarSell[1] and close < low[1]  and isBearEntry
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Strategy Execution
-// Entry: signal bar high/low + 1 tick
-// Stop:  Signal Bar mode (signal bar low for buy, high for sell)
-// TP:    2R
+// Brooks 入场逻辑：
+//   信号 K 收盘确认 → 下一根 K 挂 buy stop @ signal bar high + 1 tick
+//                     或挂 sell stop @ signal bar low - 1 tick
+//   止损 = 信号 K 的 low (做多) / high (做空)
+//   止盈 = 2R
+//
+// 实现：
+//   在信号 K 确认的那根 bar（barstate.isconfirmed），
+//   用 strategy.entry(..., stop=entryPrice) 挂条件单，
+//   下一根 bar 如果价格触及 entryPrice 则成交，否则挂单自然过期（用 oca 管理）
 // ══════════════════════════════════════════════════════════════════════════════
 noPosition = strategy.position_size == 0
 
-buySignal  = buySignalRaw  and noPosition
-sellSignal = sellSignalRaw and noPosition
+// 信号 K 确认后，下一根 bar 挂 stop order
+// [1] 因为我们在 bar close 后判定，当前 bar 就是"信号 K 的下一根"
+// isSignalBarBuy[1] = 上一根是信号 K
+var bool pendingBuyStop  = false
+var bool pendingSellStop = false
+var float pendingBuyEntry  = na
+var float pendingBuyStopLoss = na
+var float pendingSellEntry = na
+var float pendingSellStopLoss = na
 
-if buySignal
-    float entryPrice = high[1] + syminfo.mintick
-    float sl         = low[1]
-    float risk       = entryPrice - sl
-    float tp         = entryPrice + risk * 2.0
-    strategy.entry("Long", strategy.long)
-    strategy.exit("Long Exit", "Long", stop=sl, limit=tp)
+confirmed = barstate.isconfirmed
 
-if sellSignal
-    float entryPrice = low[1] - syminfo.mintick
-    float sl         = high[1]
-    float risk       = sl - entryPrice
-    float tp         = entryPrice - risk * 2.0
-    strategy.entry("Short", strategy.short)
-    strategy.exit("Short Exit", "Short", stop=sl, limit=tp)
+// 当信号 K 收盘确认时，记录挂单价格
+if confirmed and isSignalBarBuy and noPosition and not pendingBuyStop
+    pendingBuyStop     := true
+    pendingBuyEntry    := high + syminfo.mintick
+    pendingBuyStopLoss := low
+    pendingSellStop    := false
+    pendingSellEntry   := na
+    pendingSellStopLoss := na
+
+if confirmed and isSignalBarSell and noPosition and not pendingSellStop
+    pendingSellStop     := true
+    pendingSellEntry    := low - syminfo.mintick
+    pendingSellStopLoss := high
+    pendingBuyStop      := false
+    pendingBuyEntry     := na
+    pendingBuyStopLoss  := na
+
+// 挂 buy stop order（在信号 K 的下一根 bar 执行）
+if pendingBuyStop and noPosition
+    float risk = pendingBuyEntry - pendingBuyStopLoss
+    float tp   = pendingBuyEntry + risk * 2.0
+    // 动态仓位：风险金额 / 止损点数
+    float riskMoney = strategy.equity * riskPct / 100.0
+    float qty = risk > 0 ? math.floor(riskMoney / risk * 100) / 100 : 0
+    if qty > 0
+        strategy.entry("Long", strategy.long, qty=qty, stop=pendingBuyEntry)
+        strategy.exit("Long Exit", "Long", stop=pendingBuyStopLoss, limit=tp)
+
+if pendingSellStop and noPosition
+    float risk = pendingSellStopLoss - pendingSellEntry
+    float tp   = pendingSellEntry - risk * 2.0
+    float riskMoney = strategy.equity * riskPct / 100.0
+    float qty = risk > 0 ? math.floor(riskMoney / risk * 100) / 100 : 0
+    if qty > 0
+        strategy.entry("Short", strategy.short, qty=qty, stop=pendingSellEntry)
+        strategy.exit("Short Exit", "Short", stop=pendingSellStopLoss, limit=tp)
+
+// 成交后清除挂单状态
+if strategy.position_size != 0
+    pendingBuyStop      := false
+    pendingSellStop     := false
+    pendingBuyEntry     := na
+    pendingBuyStopLoss  := na
+    pendingSellEntry    := na
+    pendingSellStopLoss := na
+
+// 如果下一根 bar 没有触发挂单（1 bar 超时），取消
+// 用 strategy.cancel 在新信号或超时时清除
+if confirmed and not isSignalBarBuy and not isSignalBarSell and noPosition
+    if pendingBuyStop
+        strategy.cancel("Long")
+        pendingBuyStop     := false
+        pendingBuyEntry    := na
+        pendingBuyStopLoss := na
+    if pendingSellStop
+        strategy.cancel("Short")
+        pendingSellStop     := false
+        pendingSellEntry    := na
+        pendingSellStopLoss := na
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Visual: signal markers
+// Visual: signal markers (信号 K 标记)
 // ══════════════════════════════════════════════════════════════════════════════
-plotshape(buySignal,  title="Buy",  location=location.belowbar, color=color.green, style=shape.circle, size=size.small)
-plotshape(sellSignal, title="Sell", location=location.abovebar, color=color.red,   style=shape.circle, size=size.small)
+plotshape(confirmed and isSignalBarBuy  and noPosition, title="Signal Bar Buy",  location=location.belowbar, color=color.green, style=shape.circle, size=size.small)
+plotshape(confirmed and isSignalBarSell and noPosition, title="Signal Bar Sell", location=location.abovebar, color=color.red,   style=shape.circle, size=size.small)
