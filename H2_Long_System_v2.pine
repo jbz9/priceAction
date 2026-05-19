@@ -76,15 +76,9 @@ barBody(i) => math.abs(close[i] - open[i])
 isBullClose(i) => close[i] > open[i]
 isBearClose(i) => close[i] < open[i]
 
-isStrongBullBar(i) =>
-    isBullClose(i) and
-    close[i] >= low[i] + 0.70 * barRange(i) and
-    barBody(i) >= 0.40 * atr14[i]
+isStrongBullBar(i) => isBullClose(i) and close[i] >= low[i] + 0.70 * barRange(i) and barBody(i) >= 0.40 * atr14[i]
 
-isStrongBearBar(i) =>
-    isBearClose(i) and
-    close[i] <= low[i] + 0.30 * barRange(i) and
-    barBody(i) >= 0.40 * atr14[i]
+isStrongBearBar(i) => isBearClose(i) and close[i] <= low[i] + 0.30 * barRange(i) and barBody(i) >= 0.40 * atr14[i]
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -152,15 +146,15 @@ var int lastSwingHighBar = 0
 var int lastSwingLowBar = 0
 
 if not na(pvtHigh2) and bar_index - lastSwingLowBar >= 3
-    dist = na(lastSwingLow) ? atr14 : (pvtHigh2 - lastSwingLow)
-    if dist >= 0.75 * atr14
+    distH = na(lastSwingLow) ? atr14 : (pvtHigh2 - lastSwingLow)
+    if distH >= 0.75 * atr14
         prevSwingHigh := lastSwingHigh
         lastSwingHigh := pvtHigh2
         lastSwingHighBar := bar_index - 2
 
 if not na(pvtLow2) and bar_index - lastSwingHighBar >= 3
-    dist = na(lastSwingHigh) ? atr14 : (lastSwingHigh - pvtLow2)
-    if dist >= 0.75 * atr14
+    distL = na(lastSwingHigh) ? atr14 : (lastSwingHigh - pvtLow2)
+    if distL >= 0.75 * atr14
         prevSwingLow := lastSwingLow
         lastSwingLow := pvtLow2
         lastSwingLowBar := bar_index - 2
@@ -282,13 +276,7 @@ if checkLen >= 3
             break
 
 // 健康回调判定
-healthyPullback = isPullingBack and
-     pullbackRatio < maxPBRatio and
-     pullbackRatio > 0 and
-     (na(legStart) ? true : currentPBLow > legStart) and
-     not bearConsecInPB and
-     pullbackBars <= maxPBTime and
-     pullbackDepth >= 0.25 * atr14
+healthyPullback = isPullingBack and pullbackRatio < maxPBRatio and pullbackRatio > 0 and (na(legStart) ? true : currentPBLow > legStart) and not bearConsecInPB and pullbackBars <= maxPBTime and pullbackDepth >= 0.25 * atr14
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -298,21 +286,15 @@ healthyPullback = isPullingBack and
 // H2: H1弱/失败后第二次突破前一根K高点
 
 // 信号K质量检测
-isH1QualityOK(i) =>
-    not isStrongBearBar(i) and
-    close[i] >= low[i] + 0.40 * barRange(i)
+isH1QualityOK(i) => not isStrongBearBar(i) and close[i] >= low[i] + 0.40 * barRange(i)
 
-isH2QualityOK(i) =>
-    isBullClose(i) and
-    not isStrongBearBar(i) and
-    close[i] >= low[i] + 0.40 * barRange(i)
+isH2QualityOK(i) => isBullClose(i) and not isStrongBearBar(i) and close[i] >= low[i] + 0.40 * barRange(i)
 
 // 突破前一根K高点检测 (当前已收盘bar[1]高点 > bar[2]高点)
 breakAbovePrior = high[1] > high[2]
 
 // 非高位噪音检测
-notHighNoise = na(legHigh) ? true :
-    not (math.abs(close[1] - legHigh) < 0.25 * atr14 and pullbackDepth < 0.50 * atr14)
+notHighNoise = na(legHigh) ? true : not (math.abs(close[1] - legHigh) < 0.25 * atr14 and pullbackDepth < 0.50 * atr14)
 
 // 近期无强空头压制
 recentBearCount = 0
@@ -334,26 +316,16 @@ var int h2SignalBarIdx = 0
 baseCondition = systemAllowed and hourlyBackgroundOK and strongBullTrend and phaseAllowsH2 and healthyPullback
 
 // H1 检测
-h1Detected = baseCondition and tradeState == 0 and
-     breakAbovePrior and
-     isH1QualityOK(1) and
-     notHighNoise and
-     noRecentBearPressure and
-     pullbackBars >= 2
+h1Detected = baseCondition and tradeState == 0 and breakAbovePrior and isH1QualityOK(1) and notHighNoise and noRecentBearPressure and pullbackBars >= 2
 
 // H1成功判定 (Strong Follow Through: 强多头收盘且>H1高点)
-h1Success = tradeState == 1 and bar_index - h1BarIdx <= 2 and
-    (isStrongBullBar(1) and close[1] > h1High) or
-    (close[1] > legHigh)
+h1Success = tradeState == 1 and bar_index - h1BarIdx <= 2 and ((isStrongBullBar(1) and close[1] > h1High) or (close[1] > legHigh))
 
 // H1弱/失败
 h1WeakOrFail = tradeState == 1 and bar_index - h1BarIdx > 2 and not h1Success
 
 // H2 检测
-h2Detected = baseCondition and tradeState == 2 and
-    breakAbovePrior and
-    isH2QualityOK(1) and
-    noRecentBearPressure
+h2Detected = baseCondition and tradeState == 2 and breakAbovePrior and isH2QualityOK(1) and noRecentBearPressure
 
 // 状态转移
 if h1Detected and tradeState == 0
@@ -545,10 +517,7 @@ if not tradeActive and tradeState == 0
 plot(ema20, "EMA20", color=color.new(color.blue, 20), linewidth=2)
 
 // 相位背景色
-bgColor = isSpikePhase ? color.new(color.green, 92) :
-          isChannelPhase ? color.new(color.teal, 95) :
-          isLateChannel ? color.new(color.orange, 92) :
-          na
+bgColor = isSpikePhase ? color.new(color.green, 92) : isChannelPhase ? color.new(color.teal, 95) : isLateChannel ? color.new(color.orange, 92) : na
 bgcolor(strongBullTrend ? bgColor : na, title="趋势相位")
 
 // H2 信号标记（买入信号）
