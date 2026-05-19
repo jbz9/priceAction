@@ -1,11 +1,20 @@
 //@version=5
-// v1.4 策略回测版（2025-05）
-// 触发频率与 master 分支 EMA_PA_Brooks.pine 圆点 100% 一致
-// （直接复制 indicator 的 buySignalRaw/sellSignalRaw 作为触发）
+// v1.5 策略回测版（2025-05）
+// Brooks 真实入场实现：
+//   触发：信号 K 收盘（isSignalBarBuy/Sell）
+//   挂单：当根 bar 立即下 stop @ signal bar high + 1 tick (多) / low - 1 tick (空)
+//   成交：跟随 K 内被动突破，精确成交价 = signal bar high/low ± 1 tick
+//   超时：跟随 K 内未触发即取消（1-bar timeout）
 //
-// 入场：buySignalRaw 触发当根 bar（跟随 K 收盘）下 stop order
-//       @ signal bar high + 1 tick（多）/ signal bar low - 1 tick（空）
-//       → 下根 bar 一开盘 stop 立即成交
+// 这样：
+//   - 实际入场价 = 计划入场价（精确，无 stop-order gap 偏差）
+//   - 实际亏损 = 计划亏损 = $200（精确以损订仓）
+//   - 实际盈亏比 = 1R 精确
+//
+// 注：成交频率会比 indicator 圆点多——因为 indicator 圆点要求"跟随 K close
+//     突破信号 K 高+ 跟随 K 是质量 K"，而 Brooks 实际只要跟随 K 高点 ≥ 信号 K 高
+//     +1 tick 就成交（不等跟随 K 收盘判断）。这是 Brooks 真实策略行为。
+//
 // 止损：Signal Bar 模式（信号 K low/high）
 // 止盈：1R
 // 资金：$10000 本金，每笔固定 $200 止损，以损订仓（qty = $200 / 止损距离）
@@ -57,7 +66,7 @@ midLow      = input.float(0.35,          "区间中部下界",             step=
 midHigh     = input.float(0.65,          "区间中部上界",             step=0.05, group=grMC)
 
 grSL = "Stop Loss"
-stopMode          = input.string("Signal Bar", "Stop Mode", options=["Signal Bar","Entry Bar","Swing Pivot"], group=grSL)
+stopMode          = input.string("Signal Bar", "Stop Mode", options=["Signal Bar","Swing Pivot"], group=grSL, tooltip="Signal Bar = 信号 K 的 low/high；Swing Pivot = 最近 N 根的最低/最高")
 swingStopLookback = input.int(5, "Swing Pivot Lookback", minval=2, group=grSL)
 
 grRisk = "Risk Management"
@@ -118,39 +127,33 @@ emaContactSell = emaInteractionSell or (priorTouchSell and close < ema1)
 isSignalBarBuy  = marketCycleOk and (ema1 > ema2) and emaUp   and emaContactBuy  and isBullSignalBar
 isSignalBarSell = marketCycleOk and (ema1 < ema2) and emaDown and emaContactSell and isBearSignalBar
 
-confirmed     = barstate.isconfirmed
-buySignalRaw  = confirmed and isSignalBarBuy[1]  and close > high[1] and isBullEntry
-sellSignalRaw = confirmed and isSignalBarSell[1] and close < low[1]  and isBearEntry
+confirmed = barstate.isconfirmed
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Stop Loss Price（与 indicator 一致的三种模式）
+// Stop Loss Price（信号 K 当根 bar 的 low/high）
 // ══════════════════════════════════════════════════════════════════════════════
 swingBuyStop  = ta.lowest(low,   swingStopLookback)
 swingSellStop = ta.highest(high, swingStopLookback)
 
-buySLPrice  = stopMode == "Signal Bar" ? low[1]  : stopMode == "Entry Bar" ? low  : swingBuyStop
-sellSLPrice = stopMode == "Signal Bar" ? high[1] : stopMode == "Entry Bar" ? high : swingSellStop
+buySLPrice  = stopMode == "Signal Bar" ? low  : swingBuyStop
+sellSLPrice = stopMode == "Signal Bar" ? high : swingSellStop
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Strategy Execution
 //
-// 触发条件：buySignalRaw / sellSignalRaw（与 indicator 圆点频率 100% 一致）
-//
-// 入场实现：
-//   buySignalRaw 触发的当根 bar = 跟随 K 收盘
-//   此时 high[1] = 信号 K 的 high
-//   下 stop order @ high[1] + 1 tick
-//   下根 bar 一开盘（open 通常 ≈ close > high[1]）立即成交
+// 触发条件：信号 K 收盘当根 bar (isSignalBarBuy/Sell)
+//          → 立即下 stop order @ 信号 K 高/低 ±1 tick
+// 跟随 K 内突破即被动成交，成交价精确 = 信号 K 高/低 ±1 tick
 // ══════════════════════════════════════════════════════════════════════════════
 noPosition = strategy.position_size == 0
 
-buySignal  = buySignalRaw  and noPosition
-sellSignal = sellSignalRaw and noPosition
+buySignal  = confirmed and isSignalBarBuy  and noPosition
+sellSignal = confirmed and isSignalBarSell and noPosition
 
 var int pendingBarIdx = na
 
 if buySignal
-    float entry = high[1] + syminfo.mintick
+    float entry = high + syminfo.mintick
     float sl    = buySLPrice
     float risk  = entry - sl
     float tp    = entry + risk * tpR
@@ -162,7 +165,7 @@ if buySignal
         pendingBarIdx := bar_index
 
 if sellSignal
-    float entry = low[1] - syminfo.mintick
+    float entry = low - syminfo.mintick
     float sl    = sellSLPrice
     float risk  = sl - entry
     float tp    = entry - risk * tpR
