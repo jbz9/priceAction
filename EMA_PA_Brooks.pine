@@ -140,8 +140,7 @@ sellSLPrice = stopMode == "Signal Bar" ? high[1] : stopMode == "Entry Bar" ? hig
 // ══════════════════════════════════════════════════════════════════════════════
 grTP        = "Take Profit Levels (Latest Signal Only)"
 showTP      = input.bool(true,  "显示止盈线",                                      group=grTP)
-exitTpLevel = input.string("2R", "完全止盈目标 (信号锁解锁条件)", options=["1R","2R"],
-                            group=grTP, tooltip="持仓后必须 SL 或此目标 TP 命中，才会解锁下一笔信号")
+exitTpLevel = input.string("2R", "完全止盈目标 (信号锁解锁条件)", options=["1R","2R"], group=grTP, tooltip="持仓后必须 SL 或此目标 TP 命中，才会解锁下一笔信号")
 tp1Col      = input.color(color.new(color.teal, 0), "1R 颜色",                     group=grTP)
 tp2Col      = input.color(color.new(color.blue, 0), "2R 颜色",                     group=grTP)
 tpWidth     = input.int(2,      "线条宽度",   minval=1, maxval=4,                  group=grTP)
