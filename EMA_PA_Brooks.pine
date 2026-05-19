@@ -98,7 +98,6 @@ buySignalRaw  = confirmed and isSignalBarBuy[1]  and close > high[1] and isBullE
 sellSignalRaw = confirmed and isSignalBarSell[1] and close < low[1]  and isBearEntry
 
 var int positionState = 0
-var int posEntryBar   = na
 
 buySignal  = buySignalRaw  and positionState == 0
 sellSignal = sellSignalRaw and positionState == 0
@@ -164,13 +163,12 @@ f_deleteTPLabel(lb) =>
 // ══════════════════════════════════════════════════════════════════════════════
 if buySignal
     positionState  := 1
-    posEntryBar    := bar_index
     activeBuySL    := buySLPrice
     activeBuySLBar := bar_index
     activeSellSL   := na
     activeSellSLBar:= na
     // ✅ showSL 控制是否创建线条，na 时延伸逻辑自动跳过
-    buySLLine := showSL ? line.new(bar_index, activeBuySL, bar_index + 1, activeBuySL, color=color.red, width=1) : na
+    buySLLine := showSL ? line.new(bar_index, activeBuySL, bar_index + 1, activeBuySL, color=color.red, width=tpWidth, style=f_tpStyle(tpStyle)) : na
 
     if showTP
         f_deleteTPLine(buyTP1Line)
@@ -213,13 +211,12 @@ if buySignal
 
 if sellSignal
     positionState  := -1
-    posEntryBar    := bar_index
     activeSellSL   := sellSLPrice
     activeSellSLBar:= bar_index
     activeBuySL    := na
     activeBuySLBar := na
     // ✅ showSL 控制是否创建线条
-    sellSLLine := showSL ? line.new(bar_index, activeSellSL, bar_index + 1, activeSellSL, color=color.red, width=1) : na
+    sellSLLine := showSL ? line.new(bar_index, activeSellSL, bar_index + 1, activeSellSL, color=color.red, width=tpWidth, style=f_tpStyle(tpStyle)) : na
 
     if showTP
         f_deleteTPLine(buyTP1Line)
@@ -278,92 +275,42 @@ if showTP
 buyStopCanTrigger  = not na(activeBuySLBar)  and bar_index > activeBuySLBar
 sellStopCanTrigger = not na(activeSellSLBar) and bar_index > activeSellSLBar
 
+// 出场后保留 SL/TP 线和标签作为历史展示，仅清 active 数值（停止延伸）
+// 真正清旧 TP 对象由下一信号入场时的 if buySignal / if sellSignal 块负责
 if buyStopCanTrigger and not na(activeBuySL) and low <= activeBuySL
     positionState  := 0
-    posEntryBar    := na
     activeBuySL    := na
     activeBuySLBar := na
-    if showTP
-        f_deleteTPLine(buyTP1Line)
-        f_deleteTPLine(buyTP2Line)
-        f_deleteTPLine(sellTP1Line)
-        f_deleteTPLine(sellTP2Line)
-        f_deleteTPLabel(buyTP1Label)
-        f_deleteTPLabel(buyTP2Label)
-        f_deleteTPLabel(sellTP1Label)
-        f_deleteTPLabel(sellTP2Label)
-        activeBuyTP1  := na
-        activeBuyTP2  := na
-        activeSellTP1 := na
-        activeSellTP2 := na
-        buyTP1Line    := na
-        buyTP2Line    := na
-        sellTP1Line   := na
-        sellTP2Line   := na
-        buyTP1Label   := na
-        buyTP2Label   := na
-        sellTP1Label  := na
-        sellTP2Label  := na
+    activeBuyTP1   := na
+    activeBuyTP2   := na
+    activeSellTP1  := na
+    activeSellTP2  := na
 
 if sellStopCanTrigger and not na(activeSellSL) and high >= activeSellSL
-    positionState  := 0
-    posEntryBar    := na
-    activeSellSL   := na
-    activeSellSLBar:= na
-    if showTP
-        f_deleteTPLine(buyTP1Line)
-        f_deleteTPLine(buyTP2Line)
-        f_deleteTPLine(sellTP1Line)
-        f_deleteTPLine(sellTP2Line)
-        f_deleteTPLabel(buyTP1Label)
-        f_deleteTPLabel(buyTP2Label)
-        f_deleteTPLabel(sellTP1Label)
-        f_deleteTPLabel(sellTP2Label)
-        activeBuyTP1  := na
-        activeBuyTP2  := na
-        activeSellTP1 := na
-        activeSellTP2 := na
-        buyTP1Line    := na
-        buyTP2Line    := na
-        sellTP1Line   := na
-        sellTP2Line   := na
-        buyTP1Label   := na
-        buyTP2Label   := na
-        sellTP1Label  := na
-        sellTP2Label  := na
+    positionState   := 0
+    activeSellSL    := na
+    activeSellSLBar := na
+    activeBuyTP1    := na
+    activeBuyTP2    := na
+    activeSellTP1   := na
+    activeSellTP2   := na
 
 // 信号锁解锁：超时(D) + 反向信号(C)
-lockTimedOut = positionState != 0 and not na(posEntryBar) and (bar_index - posEntryBar) >= lockTimeout
+// 复用 activeBuySLBar / activeSellSLBar 作为入场 bar 索引（与 SL 触发守护共用）
+lockEntryBar  = positionState == 1 ? activeBuySLBar : positionState == -1 ? activeSellSLBar : na
+lockTimedOut  = positionState != 0 and not na(lockEntryBar) and (bar_index - lockEntryBar) >= lockTimeout
 reverseUnlock = (positionState == 1 and sellSignalRaw) or (positionState == -1 and buySignalRaw)
 
 if lockTimedOut or reverseUnlock
-    positionState  := 0
-    posEntryBar    := na
-    activeBuySL    := na
-    activeBuySLBar := na
-    activeSellSL   := na
-    activeSellSLBar:= na
-    if showTP
-        f_deleteTPLine(buyTP1Line)
-        f_deleteTPLine(buyTP2Line)
-        f_deleteTPLine(sellTP1Line)
-        f_deleteTPLine(sellTP2Line)
-        f_deleteTPLabel(buyTP1Label)
-        f_deleteTPLabel(buyTP2Label)
-        f_deleteTPLabel(sellTP1Label)
-        f_deleteTPLabel(sellTP2Label)
-        activeBuyTP1  := na
-        activeBuyTP2  := na
-        activeSellTP1 := na
-        activeSellTP2 := na
-        buyTP1Line    := na
-        buyTP2Line    := na
-        sellTP1Line   := na
-        sellTP2Line   := na
-        buyTP1Label   := na
-        buyTP2Label   := na
-        sellTP1Label  := na
-        sellTP2Label  := na
+    positionState   := 0
+    activeBuySL     := na
+    activeBuySLBar  := na
+    activeSellSL    := na
+    activeSellSLBar := na
+    activeBuyTP1    := na
+    activeBuyTP2    := na
+    activeSellTP1   := na
+    activeSellTP2   := na
 
 grStyle  = "Signal Styling"
 shapeOpt = input.string("圆形", "信号形状", options=["圆形","正方形","菱形","十字"], group=grStyle)
