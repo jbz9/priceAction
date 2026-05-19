@@ -1,5 +1,5 @@
 //@version=5
-// v1.3 策略回测版（2025-05）
+// v1.4 策略回测版（2025-05）
 // 触发频率与 master 分支 EMA_PA_Brooks.pine 圆点 100% 一致
 // （直接复制 indicator 的 buySignalRaw/sellSignalRaw 作为触发）
 //
@@ -8,10 +8,11 @@
 //       → 下根 bar 一开盘 stop 立即成交
 // 止损：Signal Bar 模式（信号 K low/high）
 // 止盈：1R
-// 风险：固定 $10/笔（≈ 初始资金 $1000 的 1%）
+// 资金：$10000 本金，每笔固定 $200 止损，以损订仓（qty = $200 / 止损距离）
+// 出场：每笔交易仅以 SL 或 TP 结束，无强制平仓
 strategy("EMA PA - Brooks [Strategy]",
       overlay=true,
-      initial_capital=1000,
+      initial_capital=10000,
       default_qty_type=strategy.fixed,
       default_qty_value=1,
       commission_type=strategy.commission.cash_per_order,
@@ -40,7 +41,6 @@ gr0 = "Pullback Logic"
 pbLookback  = input.int(10,    "回调回溯周期",          minval=2, group=gr0)
 slopeFilter = input.bool(true, "均线斜率过滤",                    group=gr0)
 strictPA    = input.bool(true, "严格 K 线质量过滤",               group=gr0)
-lockTimeout = input.int(30,    "信号锁超时(K线数)",      minval=5, group=gr0, tooltip="持仓后超过N根K线未触发SL/TP则强制平仓")
 
 gr1 = "Moving Average Settings"
 maType  = input.string("EMA", "MA Type", options=["SMA","EMA","WMA","RMA"], group=gr1)
@@ -61,8 +61,8 @@ stopMode          = input.string("Signal Bar", "Stop Mode", options=["Signal Bar
 swingStopLookback = input.int(5, "Swing Pivot Lookback", minval=2, group=grSL)
 
 grRisk = "Risk Management"
-riskMoneyFixed = input.float(10.0, "固定风险 $",  minval=1.0, step=1.0, group=grRisk, tooltip="每笔交易固定亏损额度（默认 $10 ≈ 初始 $1000 的 1%）")
-tpR            = input.float(1.0,  "止盈倍数 R", minval=0.5, step=0.5, group=grRisk, tooltip="止盈距离 = 风险 × R 倍")
+riskMoneyFixed = input.float(200.0, "固定风险 $",  minval=1.0, step=10.0, group=grRisk, tooltip="每笔交易固定亏损额度（默认 $200 / $10000 = 2%；以损订仓：qty = 风险 / 止损距离）")
+tpR            = input.float(1.0,   "止盈倍数 R", minval=0.5, step=0.5,  group=grRisk, tooltip="止盈距离 = 风险 × R 倍")
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 以下信号逻辑逐字复制自 master 分支 EMA_PA_Brooks.pine
@@ -182,18 +182,8 @@ if not na(pendingBarIdx) and noPosition and bar_index - pendingBarIdx >= 1 and n
 if strategy.position_size != 0
     pendingBarIdx := na
 
-// 持仓 lockTimeout：超过 N 根 bar 仍未触发 SL/TP 则强制平仓
-var int entryBarIdx = na
-if strategy.position_size != 0 and strategy.position_size[1] == 0
-    entryBarIdx := bar_index
-
-if strategy.position_size != 0 and not na(entryBarIdx)
-    if bar_index - entryBarIdx >= lockTimeout
-        strategy.close_all("Timeout")
-        entryBarIdx := na
-
-if strategy.position_size == 0
-    entryBarIdx := na
+// 注：不使用 lockTimeout 强制平仓——每笔交易必须以 SL 或 TP 结束，
+// 以保证胜率统计纯净（无 Timeout 出场污染）。
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Visual: 信号标记（与 indicator 圆点位置一致）
