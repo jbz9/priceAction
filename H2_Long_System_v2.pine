@@ -38,6 +38,11 @@ sessionStart     = input.session("0935-1530", "交易时段 (ET)", group=grp_ses
 lunchStart       = input.int(1130, "午盘开始(HHMM)", group=grp_session)
 lunchEnd         = input.int(1300, "午盘结束(HHMM)", group=grp_session)
 
+grp_viz = "可视化"
+showLevels = input.bool(false, "显示水平参考线 (可能影响图表缩放)", group=grp_viz, tooltip="开启后会画出止损/止盈/Leg High/PB Low 等参考线。这些线参与 Y 轴自动缩放，可能压扁 K 线。如出现该问题，请保持关闭，仅依赖信号箭头与标签。")
+showEntryStops = input.bool(true, "显示入场后的止损/止盈线 (持仓期间)", group=grp_viz)
+showLegLines = input.bool(false, "显示 Leg High / PB Low 参考线", group=grp_viz)
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 步骤 0：时段过滤
@@ -531,11 +536,11 @@ plotshape(h1Signal, title="H1 标记", style=shape.circle, location=location.bel
 // 入场确认标记
 plotshape(tradeActive and barsInTrade == 1, title="入场确认", style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="BUY")
 
-// 止损线 & 止盈线
-plot(tradeActive ? activeStop : na, "止损线", color=color.red, linewidth=2, style=plot.style_linebr)
-plot(tradeActive and not scalpHit ? activeScalp : na, "Scalp目标", color=color.new(color.green, 30), linewidth=1, style=plot.style_linebr)
-plot(tradeActive and swingMode ? activeSwing : na, "Swing目标", color=color.new(color.purple, 30), linewidth=1, style=plot.style_linebr)
-plot(not na(entryPrice) and tradeActive ? entryPrice : na, "入场价", color=color.new(color.gray, 40), linewidth=1, style=plot.style_linebr)
+// 止损线 & 止盈线 (默认仅在持仓期间显示，可在输入设置中关闭)
+plot(showEntryStops and tradeActive ? activeStop : na, "止损线", color=color.red, linewidth=2, style=plot.style_linebr)
+plot(showEntryStops and tradeActive and not scalpHit ? activeScalp : na, "Scalp目标", color=color.new(color.green, 30), linewidth=1, style=plot.style_linebr)
+plot(showEntryStops and tradeActive and swingMode ? activeSwing : na, "Swing目标", color=color.new(color.purple, 30), linewidth=1, style=plot.style_linebr)
+plot(showEntryStops and not na(entryPrice) and tradeActive ? entryPrice : na, "入场价", color=color.new(color.gray, 40), linewidth=1, style=plot.style_linebr)
 
 
 // 退出信号标记
@@ -544,9 +549,9 @@ plotshape(scalpHitSignal, title="Scalp止盈", style=shape.flag, location=locati
 plotshape(swingHitSignal, title="Swing止盈", style=shape.flag, location=location.abovebar, color=color.purple, size=size.small, text="TP2")
 plotshape(defensiveExitSignal, title="防守退出", style=shape.xcross, location=location.abovebar, color=color.orange, size=size.small, text="DEF")
 
-// Leg结构显示
-plot(isPullingBack and not na(legHigh) ? legHigh : na, "Leg High", color=color.new(color.teal, 50), linewidth=1, style=plot.style_linebr)
-plot(isPullingBack and not na(currentPBLow) ? currentPBLow : na, "PB Low", color=color.new(color.red, 60), linewidth=1, style=plot.style_linebr)
+// Leg结构显示 (默认关闭，避免影响图表缩放)
+plot(showLegLines and isPullingBack and not na(legHigh) ? legHigh : na, "Leg High", color=color.new(color.teal, 50), linewidth=1, style=plot.style_linebr)
+plot(showLegLines and isPullingBack and not na(currentPBLow) ? currentPBLow : na, "PB Low", color=color.new(color.red, 60), linewidth=1, style=plot.style_linebr)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Alert 条件
