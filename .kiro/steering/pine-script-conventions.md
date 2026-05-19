@@ -1,11 +1,10 @@
 ---
-inclusion: fileMatch
-fileMatchPattern: '**/*.pine'
+inclusion: always
 ---
 
 # pine-script-conventions — 本仓库 Pine 编辑约束
 
-> 仓库级 steering，**自动加载**于任何 `.pine` 文件改动。
+> 仓库级 steering，**始终自动加载**（适用于所有对话场景）。
 > 完整 4-phase 工作流（含心智模拟模板等）在用户级 skill `pine-script-expert` 中，必要时 activate 它。
 > 本文件是**强制要勾的清单**，不是教学。
 

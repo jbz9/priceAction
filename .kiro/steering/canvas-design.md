@@ -1,3 +1,7 @@
+---
+inclusion: always
+---
+
 # canvas-design — 流程图与可视化规范
 
 > 本文件等价于 Claude 的 `/canvas-design` skill，在本仓库 (priceAction) 内自动生效。
