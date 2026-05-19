@@ -1,3 +1,7 @@
+---
+inclusion: always
+---
+
 # doc-coauthoring — 文档协同写作规范
 
 > 本文件等价于 Claude 的 `/doc-coauthoring` skill，在本仓库 (priceAction) 内自动生效。

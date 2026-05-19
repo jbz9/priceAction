@@ -1,3 +1,7 @@
+---
+inclusion: always
+---
+
 # theme-factory — 文档主题与排版规范
 
 > 本文件等价于 Claude 的 `/theme-factory` skill，在本仓库 (priceAction) 内自动生效。
