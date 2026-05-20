@@ -1,8 +1,23 @@
 //@version=6
-// VWAP PA - Brooks v1.2 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
+// VWAP PA - Brooks v1.3 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
 // VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
 // Auto Anchor（日内→Day, D→Week, W→Month）| 仅显示当天 VWAP 段
-// SL/TP: line + label（同 EMA 版）| 信号: ● 圆形
+// SL/TP: line + label（与 EMA PA 完全一致）| 信号: ● 圆形
+//
+// 已知风险：
+// - anchorReset 跟随 exchange 日界，与 sessionStr 时区可能不对齐
+//   （上海 9:00 开盘瞬间 VWAP 含 NY 收盘后亚盘累积，非纯日内起锚）
+// - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
+//
+// 变更日志：
+// v1.3 (2026-05):
+//   - 移除 ±σ 带相关 inputs / plots / fills（UI 精简）
+//   - 4 个状态清空块合并为 1 个 reset 块（DRY）
+//   - ta.vwap 简化为二参数版（不再需要带）
+//   - SL line 创建改用 ternary 赋值，与 EMA PA 风格完全对齐
+// v1.2 (2026-05): 时段默认上海 9:00-23:00, 视觉对齐 TV 内置 VWAP AA
+// v1.1 (2026-05): SL/TP line + label
+// v1.0 (2026-05): 初版
 
 indicator("VWAP PA - Brooks", overlay=true, max_labels_count=500, max_lines_count=500)
 
@@ -19,16 +34,10 @@ maxSignals      = input.int  (5,     "显示信号组数", minval=1, group=gr0)
 lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr0)
 
 gr1 = "VWAP"
-showVWAP      = input.bool (true, "显示 VWAP", group=gr1)
-todayOnly     = input.bool (false, "仅显示当前 anchor 段", group=gr1, tooltip="关闭(默认) = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致；开启 = 仅显示今天/本周")
-vwapColor     = input.color(color.new(color.blue, 0), "颜色", group=gr1)
-vwapWidth     = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
-showBands     = input.bool (false, "显示 ±σ 带", group=gr1)
-band1Mult     = input.float(1.0, "±1σ", minval=0.0, step=0.1, group=gr1)
-band2Mult     = input.float(2.0, "±2σ", minval=0.0, step=0.1, group=gr1)
-band3Mult     = input.float(3.0, "±3σ", minval=0.0, step=0.1, group=gr1)
-bandColor     = input.color(color.new(color.blue, 50), "带颜色", group=gr1)
-showBandsFill = input.bool (false, "带间填充", group=gr1)
+showVWAP  = input.bool (true, "显示 VWAP", group=gr1)
+todayOnly = input.bool (false, "仅显示当前 anchor 段", group=gr1, tooltip="关闭(默认) = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致；开启 = 仅显示今天/本周")
+vwapColor = input.color(color.new(color.blue, 0), "颜色", group=gr1)
+vwapWidth = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
 
 gr2 = "ATR"
 atrLen = input.int(14, "ATR Length", minval=1, group=gr2)
@@ -87,26 +96,10 @@ inCurrentSegment = timeframe.isintraday ? sameDay : timeframe.isdaily ? sameWeek
 // todayOnly=false (默认) → 全部历史段都画（TV AA 风格）；todayOnly=true → 仅当前段
 isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
-[vwapVal, ub1, lb1] = ta.vwap(hlc3, anchorReset, band1Mult)
-[_vwap2,  ub2, lb2] = ta.vwap(hlc3, anchorReset, band2Mult)
-[_vwap3,  ub3, lb3] = ta.vwap(hlc3, anchorReset, band3Mult)
-
-atr = ta.atr(atrLen)
+vwapVal = ta.vwap(hlc3, anchorReset)
+atr     = ta.atr(atrLen)
 
 plot(showVWAP and isInActiveAnchor ? vwapVal : na, "VWAP", color=vwapColor, linewidth=vwapWidth)
-
-ub1Plot = plot(showBands and isInActiveAnchor ? ub1 : na, "+1σ", color=color.new(bandColor, 50), linewidth=1)
-lb1Plot = plot(showBands and isInActiveAnchor ? lb1 : na, "-1σ", color=color.new(bandColor, 50), linewidth=1)
-ub2Plot = plot(showBands and isInActiveAnchor ? ub2 : na, "+2σ", color=color.new(bandColor, 70), linewidth=1)
-lb2Plot = plot(showBands and isInActiveAnchor ? lb2 : na, "-2σ", color=color.new(bandColor, 70), linewidth=1)
-ub3Plot = plot(showBands and isInActiveAnchor ? ub3 : na, "+3σ", color=color.new(bandColor, 85), linewidth=1)
-lb3Plot = plot(showBands and isInActiveAnchor ? lb3 : na, "-3σ", color=color.new(bandColor, 85), linewidth=1)
-
-fill(ub1Plot, lb1Plot, color=showBandsFill and showBands ? color.new(bandColor, 92) : na)
-fill(ub2Plot, ub1Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na)
-fill(lb1Plot, lb2Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na)
-fill(ub3Plot, ub2Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na)
-fill(lb2Plot, lb3Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na)
 
 // ── Calcs ───────────────────────────────────────────────────────────────────
 
@@ -195,37 +188,19 @@ if canManage and not isFilled
     if positionState == -1 and low <= entryPrice
         isFilled := true
 
-if canManage and isFilled
-    if positionState == 1 and (low <= slPrice or high >= tp2Price)
-        positionState := 0
-        signalBarIdx  := na
-        entryPrice    := na
-        slPrice       := na
-        tp1Price      := na
-        tp2Price      := na
-        isFilled      := false
-    if positionState == -1 and (high >= slPrice or low <= tp2Price)
-        positionState := 0
-        signalBarIdx  := na
-        entryPrice    := na
-        slPrice       := na
-        tp1Price      := na
-        tp2Price      := na
-        isFilled      := false
+// ── Exit / Cancel / Reverse → 单一 reset 块 ────────────────────────────────
+
+hitExitLong  = positionState ==  1 and (low  <= slPrice or high >= tp2Price)
+hitExitShort = positionState == -1 and (high >= slPrice or low  <= tp2Price)
+hitExit      = canManage and isFilled and (hitExitLong or hitExitShort)
 
 barsSinceSignal = na(signalBarIdx) ? na : bar_index - signalBarIdx
 shouldCancel    = positionState != 0 and not isFilled and not na(barsSinceSignal) and barsSinceSignal >= lockTimeout
-if shouldCancel
-    positionState := 0
-    signalBarIdx  := na
-    entryPrice    := na
-    slPrice       := na
-    tp1Price      := na
-    tp2Price      := na
-    isFilled      := false
 
 reverseUnlock = confirmed and ((positionState == 1 and isSignalBarSell) or (positionState == -1 and isSignalBarBuy))
-if reverseUnlock
+
+shouldReset = hitExit or shouldCancel or reverseUnlock
+if shouldReset
     positionState := 0
     signalBarIdx  := na
     entryPrice    := na
@@ -270,8 +245,8 @@ f_deleteLabel(lb) =>
 
 if buySig
     f_pushLabel(label.new(bar_index, low, "●", style=label.style_none, textcolor=bullCol, size=f_sizeVal(sizeOpt), yloc=yloc.belowbar))
+    buySLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
-        buySLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle))
         f_pushSLLine(buySLLine)
         f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
@@ -294,8 +269,8 @@ if buySig
 
 if sellSig
     f_pushLabel(label.new(bar_index, high, "●", style=label.style_none, textcolor=bearCol, size=f_sizeVal(sizeOpt), yloc=yloc.abovebar))
+    sellSLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
-        sellSLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle))
         f_pushSLLine(sellSLLine)
         f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
