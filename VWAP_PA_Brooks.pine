@@ -20,6 +20,7 @@ lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr
 
 gr1 = "VWAP"
 showVWAP      = input.bool (true, "显示 VWAP", group=gr1)
+todayOnly     = input.bool (false, "仅显示当前 anchor 段", group=gr1, tooltip="关闭(默认) = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致；开启 = 仅显示今天/本周")
 vwapColor     = input.color(color.new(color.blue, 0), "颜色", group=gr1)
 vwapWidth     = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
 showBands     = input.bool (false, "显示 ±σ 带", group=gr1)
@@ -82,7 +83,9 @@ sameDay   = year(time) == year(timenow) and month(time) == month(timenow) and da
 sameWeek  = math.floor(time / 604800000.0) == math.floor(timenow / 604800000.0)
 sameMonth = year(time) == year(timenow) and month(time) == month(timenow)
 sameYear  = year(time) == year(timenow)
-isInActiveAnchor = timeframe.isintraday ? sameDay : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
+inCurrentSegment = timeframe.isintraday ? sameDay : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
+// todayOnly=false (默认) → 全部历史段都画（TV AA 风格）；todayOnly=true → 仅当前段
+isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
 [vwapVal, ub1, lb1] = ta.vwap(hlc3, anchorReset, band1Mult)
 [_vwap2,  ub2, lb2] = ta.vwap(hlc3, anchorReset, band2Mult)
