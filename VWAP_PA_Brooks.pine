@@ -239,7 +239,7 @@ if buySig
     buySLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(buySLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "SL " + str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -255,15 +255,15 @@ if buySig
         sellTP2Label := na
         buyTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         buyTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
-        buyTP1Label := label.new(bar_index, tp1Price, "1R " + str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
-        buyTP2Label := label.new(bar_index, tp2Price, "2R " + str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        buyTP1Label := label.new(bar_index + 1, tp1Price, str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        buyTP2Label := label.new(bar_index + 1, tp2Price, str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
 if sellSig
     f_pushLabel(label.new(bar_index, high, "●", style=label.style_none, textcolor=bearCol, size=f_sizeVal(sizeOpt), yloc=yloc.price))
     sellSLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(sellSLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "SL " + str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -279,8 +279,8 @@ if sellSig
         buyTP2Label := na
         sellTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         sellTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
-        sellTP1Label := label.new(bar_index, tp1Price, "1R " + str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
-        sellTP2Label := label.new(bar_index, tp2Price, "2R " + str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        sellTP1Label := label.new(bar_index + 1, tp1Price, str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        sellTP2Label := label.new(bar_index + 1, tp2Price, str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
 if positionState == 1
     if not na(buySLLine)
