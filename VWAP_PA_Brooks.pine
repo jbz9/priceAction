@@ -35,7 +35,7 @@ lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr
 
 gr1 = "VWAP"
 showVWAP  = input.bool (true, "显示 VWAP", group=gr1)
-todayOnly = input.bool (false, "仅显示当前 anchor 段", group=gr1, tooltip="关闭(默认) = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致；开启 = 仅显示今天/本周")
+todayOnly = input.bool (true,  "仅显示当天 VWAP 段", group=gr1, tooltip="开启(默认) = 仅当前 anchor 段（日内聚焦）；关闭 = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致")
 vwapColor = input.color(color.new(color.blue, 0), "颜色", group=gr1)
 vwapWidth = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
 
@@ -88,12 +88,13 @@ f_lineStyle(s) =>
 
 anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-sameDay   = year(time) == year(timenow) and month(time) == month(timenow) and dayofmonth(time) == dayofmonth(timenow)
-sameWeek  = math.floor(time / 604800000.0) == math.floor(timenow / 604800000.0)
-sameMonth = year(time) == year(timenow) and month(time) == month(timenow)
-sameYear  = year(time) == year(timenow)
-inCurrentSegment = timeframe.isintraday ? sameDay : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
-// todayOnly=false (默认) → 全部历史段都画（TV AA 风格）；todayOnly=true → 仅当前段
+// "仅显示当天"：只画当前交易日（= 最后一个 anchor 段）的 VWAP
+// time_tradingday：Pine v5+ 内置变量，同一交易日所有 bar 返回相同值（exchange 日界）
+// 获取"当前交易日"基准：从日线取最新 bar 的 time（= 当前交易日起始 timestamp）
+// 然后比较每根日内 bar 的 time_tradingday 是否 == 这个基准
+currentTradingDayStart = request.security(syminfo.tickerid, "D", time, barmerge.gaps_off, barmerge.lookahead_on)
+inCurrentSegment = timeframe.isintraday ? (time_tradingday == currentTradingDayStart) : true
+// todayOnly=true → 仅当前 anchor 段；false → 全部历史段都画（TV AA 风格）
 isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
 vwapVal = ta.vwap(hlc3, anchorReset)
