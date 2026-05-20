@@ -1,5 +1,5 @@
 //@version=6
-// VWAP PA - Brooks v1.4 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
+// VWAP PA - Brooks v1.5 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
 // VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
 // Auto Anchor（日内→Day, D→Week, W→Month）
 // SL/TP: line + label | 信号: ● 圆形
@@ -7,12 +7,16 @@
 // 设计说明（by design，非风险）：
 // - VWAP 全时段显示，anchor 跟随 exchange 日界自动切换
 // - 时段过滤固定为 09:00-23:00 Asia/Shanghai（UTC+8），无需用户配置
-// - 反向信号 reverseUnlock 不受 session 限制（仅清 lockout，不开新仓）
+// - 反向信号 reverseUnlock 不受 session 限制，清除当前状态后允许下一根 K 线反向开仓
 //
 // 已知风险：
 // - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
 //
 // 变更日志：
+// v1.5 (2026-05):
+//   - K 线质量标准从 close>50% 提升至 close>=70%（Brooks 强 K 定义）
+//   - reverseUnlock 注释修正：清状态后允许下一根反向开仓（非"不开新仓"）
+//   - SL/TP label 显示实际价格（如 "SL 4480" / "1R 4500"）
 // v1.4 (2026-05):
 //   - 移除 showVWAP / todayOnly 选项，VWAP 全程显示
 //   - 移除时段过滤 inputs，固定 09:00-23:00 Asia/Shanghai
@@ -101,8 +105,8 @@ lowerTail  = math.min(close, open) - low
 midPoint   = (high + low) / 2
 validRange = barRange > syminfo.mintick
 
-qBull = validRange and bodySize > barRange * 0.5 and upperTail < bodySize and close > midPoint
-qBear = validRange and bodySize > barRange * 0.5 and lowerTail < bodySize and close < midPoint
+qBull = validRange and bodySize > barRange * 0.5 and upperTail < bodySize and close >= low + barRange * 0.7
+qBear = validRange and bodySize > barRange * 0.5 and lowerTail < bodySize and close <= high - barRange * 0.7
 
 isBullSig = strictPA ? (close > open and qBull) : (close > open)
 isBearSig = strictPA ? (close < open and qBear) : (close < open)
@@ -235,7 +239,7 @@ if buySig
     buySLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(buySLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -251,15 +255,15 @@ if buySig
         sellTP2Label := na
         buyTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         buyTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
-        buyTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
-        buyTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        buyTP1Label := label.new(bar_index + 1, tp1Price, str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        buyTP2Label := label.new(bar_index + 1, tp2Price, str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
 if sellSig
     f_pushLabel(label.new(bar_index, high, "●", style=label.style_none, textcolor=bearCol, size=f_sizeVal(sizeOpt), yloc=yloc.price))
     sellSLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(sellSLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -275,8 +279,8 @@ if sellSig
         buyTP2Label := na
         sellTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         sellTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
-        sellTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
-        sellTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        sellTP1Label := label.new(bar_index + 1, tp1Price, str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        sellTP2Label := label.new(bar_index + 1, tp2Price, str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
 if positionState == 1
     if not na(buySLLine)
