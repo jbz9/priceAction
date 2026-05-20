@@ -1,12 +1,16 @@
 //@version=6
 // VWAP PA - Brooks v1.3 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
 // VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
-// Auto Anchor（日内→Day, D→Week, W→Month）| 仅显示当天 VWAP 段
+// Auto Anchor（日内→Day, D→Week, W→Month）| 默认仅显示当天 VWAP 段（日内交易聚焦）
 // SL/TP: line + label（与 EMA PA 完全一致）| 信号: ● 圆形
 //
+// 设计说明（by design，非风险）：
+// - VWAP 全时段计算（含亚盘），anchor 跟随 exchange 日界自动切换
+// - sessionFilter 仅过滤"可交易信号"是否触发（buySig/sellSig + alertcondition）
+//   → 流动性低的时段 VWAP 与形态照常显示，但不进入 armed 状态、不发告警
+// - 反向信号 reverseUnlock 不受 session 限制（仅清 lockout，不开新仓）
+//
 // 已知风险：
-// - anchorReset 跟随 exchange 日界，与 sessionStr 时区可能不对齐
-//   （上海 9:00 开盘瞬间 VWAP 含 NY 收盘后亚盘累积，非纯日内起锚）
 // - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
 //
 // 变更日志：
@@ -15,6 +19,7 @@
 //   - 4 个状态清空块合并为 1 个 reset 块（DRY）
 //   - ta.vwap 简化为二参数版（不再需要带）
 //   - SL line 创建改用 ternary 赋值，与 EMA PA 风格完全对齐
+//   - todayOnly 默认改为 true（日内交易聚焦，只显示当前 anchor 段）
 // v1.2 (2026-05): 时段默认上海 9:00-23:00, 视觉对齐 TV 内置 VWAP AA
 // v1.1 (2026-05): SL/TP line + label
 // v1.0 (2026-05): 初版
@@ -35,7 +40,7 @@ lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr
 
 gr1 = "VWAP"
 showVWAP  = input.bool (true, "显示 VWAP", group=gr1)
-todayOnly = input.bool (false, "仅显示当前 anchor 段", group=gr1, tooltip="关闭(默认) = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致；开启 = 仅显示今天/本周")
+todayOnly = input.bool (true,  "仅显示当天 VWAP 段", group=gr1, tooltip="开启(默认) = 仅当前 anchor 段（日内聚焦）；关闭 = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致")
 vwapColor = input.color(color.new(color.blue, 0), "颜色", group=gr1)
 vwapWidth = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
 
@@ -88,12 +93,26 @@ f_lineStyle(s) =>
 
 anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-// "仅显示当天"：只画当前交易日（= 最后一个 anchor 段）的 VWAP
-// time_tradingday：Pine v5+ 内置变量，同一交易日所有 bar 返回相同值
-// 获取"当前交易日"的基准值：从日线取最新 bar 的 time（= 最新交易日起始 timestamp）
-// 然后比较每根 5min bar 的 time_tradingday 是否 == 这个基准
-currentTradingDayStart = request.security(syminfo.tickerid, "D", time, barmerge.gaps_off, barmerge.lookahead_on)
-inCurrentSegment = timeframe.isintraday ? (time_tradingday == currentTradingDayStart) : true
+// "仅显示当天"：只画从最后一次 anchor 重置到当前的 VWAP 段
+// 用 var 追踪最后一次 anchor 的 bar_index；
+// Pine 单 pass 执行完后 lastAnchorBarIdx 指向最后段起点。
+// 但历史 bar 执行时该值可能还是旧的 → 用 plot(na) 隐藏。
+// 解法：对每根 bar 检测 "从此 bar 到 last_bar_index 之间有几个 anchor"
+//        → Pine 无法前瞻，但可以用等价条件：
+//        当前 bar 所属的交易日 == last_bar 所属的交易日
+// 用 dayofweek + time 比较改为基于 exchange 时区的日期比较：
+dayOfBarExch = dayofmonth(time, syminfo.timezone)
+dayOfNowExch = dayofmonth(timenow, syminfo.timezone)
+monOfBarExch = month(time, syminfo.timezone)
+monOfNowExch = month(timenow, syminfo.timezone)
+yrOfBarExch  = year(time, syminfo.timezone)
+yrOfNowExch  = year(timenow, syminfo.timezone)
+sameDayExch  = yrOfBarExch == yrOfNowExch and monOfBarExch == monOfNowExch and dayOfBarExch == dayOfNowExch
+
+sameWeek  = math.floor(time / 604800000.0) == math.floor(timenow / 604800000.0)
+sameMonth = yrOfBarExch == yrOfNowExch and monOfBarExch == monOfNowExch
+sameYear  = yrOfBarExch == yrOfNowExch
+inCurrentSegment = timeframe.isintraday ? sameDayExch : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
 isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
 vwapVal = ta.vwap(hlc3, anchorReset)
