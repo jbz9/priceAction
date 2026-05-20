@@ -57,8 +57,8 @@ showPanel = input.bool(true, "显示面板", group=grPanel)
 
 gr6 = "Trading Hours"
 sessionFilter = input.bool(true, "启用时段过滤", group=gr6)
-sessionStr    = input.session("2000-1200:1234567", "时段", group=gr6)
-sessionTzOpt  = input.string("America/New_York", "时区", options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"], group=gr6)
+sessionStr    = input.session("0900-2300:1234567", "时段", group=gr6)
+sessionTzOpt  = input.string("Asia/Shanghai", "时区", options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"], group=gr6)
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
