@@ -4,9 +4,13 @@
 // Auto Anchor（日内→Day, D→Week, W→Month）| 仅显示当天 VWAP 段
 // SL/TP: line + label（与 EMA PA 完全一致）| 信号: ● 圆形
 //
+// 设计说明（by design，非风险）：
+// - VWAP 全时段计算（含亚盘），anchor 跟随 exchange 日界自动切换
+// - sessionFilter 仅过滤"可交易信号"是否触发（buySig/sellSig + alertcondition）
+//   → 流动性低的时段 VWAP 与形态照常显示，但不进入 armed 状态、不发告警
+// - 反向信号 reverseUnlock 不受 session 限制（仅清 lockout，不开新仓）
+//
 // 已知风险：
-// - anchorReset 跟随 exchange 日界，与 sessionStr 时区可能不对齐
-//   （上海 9:00 开盘瞬间 VWAP 含 NY 收盘后亚盘累积，非纯日内起锚）
 // - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
 //
 // 变更日志：
