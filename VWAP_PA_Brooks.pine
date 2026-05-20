@@ -199,6 +199,25 @@ if shouldReset
     tp1Price      := na
     tp2Price      := na
     isFilled      := false
+    // 清理 SL/TP 线条和价格 label，防止孤立浮动
+    if not na(buySLLabel)
+        label.delete(buySLLabel)
+        buySLLabel := na
+    if not na(sellSLLabel)
+        label.delete(sellSLLabel)
+        sellSLLabel := na
+    if not na(buyTP1Label)
+        label.delete(buyTP1Label)
+        buyTP1Label := na
+    if not na(buyTP2Label)
+        label.delete(buyTP2Label)
+        buyTP2Label := na
+    if not na(sellTP1Label)
+        label.delete(sellTP1Label)
+        sellTP1Label := na
+    if not na(sellTP2Label)
+        label.delete(sellTP2Label)
+        sellTP2Label := na
 
 // ── Visualization ───────────────────────────────────────────────────────────
 
