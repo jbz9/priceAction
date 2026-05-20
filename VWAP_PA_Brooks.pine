@@ -213,6 +213,10 @@ var label buyTP2Label  = na
 var label sellTP1Label = na
 var label sellTP2Label = na
 
+// SL label 单独 var 跟踪（不放入 allLabels），每根 bar 跟随线条末端同步移动
+var label buySLLabel   = na
+var label sellSLLabel  = na
+
 var label[] allLabels  = array.new<label>()
 var line[]  allSLLines = array.new<line>()
 
@@ -239,7 +243,9 @@ if buySig
     buySLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(buySLLine)
-        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        if not na(buySLLabel)
+            label.delete(buySLLabel)
+        buySLLabel := label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price)
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -263,7 +269,9 @@ if sellSig
     sellSLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(sellSLLine)
-        f_pushLabel(label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
+        if not na(sellSLLabel)
+            label.delete(sellSLLabel)
+        sellSLLabel := label.new(bar_index + 1, slPrice, str.tostring(slPrice, format.mintick), style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price)
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -282,23 +290,36 @@ if sellSig
         sellTP1Label := label.new(bar_index + 1, tp1Price, str.tostring(tp1Price, format.mintick), style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
         sellTP2Label := label.new(bar_index + 1, tp2Price, str.tostring(tp2Price, format.mintick), style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
+// 每根 bar 同步延伸线条，并把所有 label 推到线条末端+1
 if positionState == 1
     if not na(buySLLine)
         line.set_x2(buySLLine, bar_index)
+    if showSL and not na(buySLLabel)
+        label.set_x(buySLLabel, bar_index + 1)
     if showTP
         if not na(buyTP1Line)
             line.set_x2(buyTP1Line, bar_index)
+        if not na(buyTP1Label)
+            label.set_x(buyTP1Label, bar_index + 1)
         if not na(buyTP2Line)
             line.set_x2(buyTP2Line, bar_index)
+        if not na(buyTP2Label)
+            label.set_x(buyTP2Label, bar_index + 1)
 
 if positionState == -1
     if not na(sellSLLine)
         line.set_x2(sellSLLine, bar_index)
+    if showSL and not na(sellSLLabel)
+        label.set_x(sellSLLabel, bar_index + 1)
     if showTP
         if not na(sellTP1Line)
             line.set_x2(sellTP1Line, bar_index)
+        if not na(sellTP1Label)
+            label.set_x(sellTP1Label, bar_index + 1)
         if not na(sellTP2Line)
             line.set_x2(sellTP2Line, bar_index)
+        if not na(sellTP2Label)
+            label.set_x(sellTP2Label, bar_index + 1)
 
 // ── Alerts ──────────────────────────────────────────────────────────────────
 
