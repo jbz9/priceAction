@@ -1,26 +1,23 @@
 //@version=6
-// VWAP PA - Brooks v1.3 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
+// VWAP PA - Brooks v1.4 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
 // VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
-// Auto Anchor（日内→Day, D→Week, W→Month）| 默认仅显示当天 VWAP 段（日内交易聚焦）
-// SL/TP: line + label（与 EMA PA 完全一致）| 信号: ● 圆形
+// Auto Anchor（日内→Day, D→Week, W→Month）
+// SL/TP: line + label | 信号: ● 圆形
 //
 // 设计说明（by design，非风险）：
-// - VWAP 全时段计算（含亚盘），anchor 跟随 exchange 日界自动切换
-// - sessionFilter 仅过滤"可交易信号"是否触发（buySig/sellSig + alertcondition）
-//   → 流动性低的时段 VWAP 与形态照常显示，但不进入 armed 状态、不发告警
+// - VWAP 全时段显示，anchor 跟随 exchange 日界自动切换
+// - 时段过滤固定为 09:00-23:00 Asia/Shanghai（UTC+8），无需用户配置
 // - 反向信号 reverseUnlock 不受 session 限制（仅清 lockout，不开新仓）
 //
 // 已知风险：
 // - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
 //
 // 变更日志：
-// v1.3 (2026-05):
-//   - 移除 ±σ 带相关 inputs / plots / fills（UI 精简）
-//   - 4 个状态清空块合并为 1 个 reset 块（DRY）
-//   - ta.vwap 简化为二参数版（不再需要带）
-//   - SL line 创建改用 ternary 赋值，与 EMA PA 风格完全对齐
-//   - todayOnly 默认改为 true（日内交易聚焦，只显示当前 anchor 段）
-// v1.2 (2026-05): 时段默认上海 9:00-23:00, 视觉对齐 TV 内置 VWAP AA
+// v1.4 (2026-05):
+//   - 移除 showVWAP / todayOnly 选项，VWAP 全程显示
+//   - 移除时段过滤 inputs，固定 09:00-23:00 Asia/Shanghai
+// v1.3 (2026-05): 移除 ±σ 带，UI 精简
+// v1.2 (2026-05): 时段默认上海 9:00-23:00
 // v1.1 (2026-05): SL/TP line + label
 // v1.0 (2026-05): 初版
 
@@ -39,8 +36,6 @@ maxSignals      = input.int  (5,     "显示信号组数", minval=1, group=gr0)
 lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr0)
 
 gr1 = "VWAP"
-showVWAP  = input.bool (true, "显示 VWAP", group=gr1)
-todayOnly = input.bool (true,  "仅显示当天 VWAP 段", group=gr1, tooltip="开启(默认) = 仅当前 anchor 段（日内聚焦）；关闭 = 显示全部历史段，与 TV 内置 VWAP AA 视觉一致")
 vwapColor = input.color(color.new(color.blue, 0), "颜色", group=gr1)
 vwapWidth = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
 
@@ -64,15 +59,10 @@ tpStyle = input.string("Solid", "线型", options=["Solid","Dashed","Dotted"], g
 gr5 = "Signal Styling"
 sizeOpt = input.string("大", "图形大小", options=["中","大"], group=gr5)
 bullCol = input.color(color.green, "Buy Color", group=gr5)
-bearCol = input.color(color.red, "Sell Color", group=gr5)
+bearCol = input.color(color.red,   "Sell Color", group=gr5)
 
 grPanel = "Info Panel"
 showPanel = input.bool(true, "显示面板", group=grPanel)
-
-gr6 = "Trading Hours"
-sessionFilter = input.bool(true, "启用时段过滤", group=gr6)
-sessionStr    = input.session("0900-2300:1234567", "时段", group=gr6)
-sessionTzOpt  = input.string("Asia/Shanghai", "时区", options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"], group=gr6)
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -80,7 +70,7 @@ f_sizeVal(opt) =>
     switch opt
         "中" => size.normal
         "大" => size.large
-        => size.normal
+        =>      size.normal
 
 f_lineStyle(s) =>
     switch s
@@ -93,20 +83,10 @@ f_lineStyle(s) =>
 
 anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-// "仅显示当天"：只画最后一个 anchor 段（当前交易日）的 VWAP
-// lookahead_on 行为：对历史 bar 返回下一个 HTF bar 的值
-// → 昨天的日内 bar 拿到今天的 time_tradingday（前移一个日线 bar）
-// → 今天的日内 bar 拿到今天的 time_tradingday（无下一根，保持当前）
-// 因此：只有今天的 bar 满足 time_tradingday == nextDayTD
-nextDayTD = request.security(syminfo.tickerid, "D", time_tradingday, barmerge.gaps_off, barmerge.lookahead_on)
-inCurrentSegment = timeframe.isintraday ? (time_tradingday == nextDayTD) : true
-// todayOnly=true → 仅当前 anchor 段；false → 全部历史段都画（TV AA 风格）
-isInActiveAnchor = todayOnly ? inCurrentSegment : true
-
 vwapVal = ta.vwap(hlc3, anchorReset)
 atr     = ta.atr(atrLen)
 
-plot(showVWAP and isInActiveAnchor ? vwapVal : na, "VWAP", color=vwapColor, linewidth=vwapWidth)
+plot(vwapVal, "VWAP", color=vwapColor, linewidth=vwapWidth)
 
 // ── Calcs ───────────────────────────────────────────────────────────────────
 
@@ -141,8 +121,8 @@ priorSellContact = not na(barsSinceHighAbove) and barsSinceHighAbove >= 1 and ba
 vwapContactBuy  = buyContactNow  or priorBuyContact
 vwapContactSell = sellContactNow or priorSellContact
 
-sessionTz = sessionTzOpt == "exchange" ? syminfo.timezone : sessionTzOpt
-inSession = sessionFilter ? not na(time(timeframe.period, sessionStr, sessionTz)) : true
+// 时段过滤：固定 09:00-23:00 Asia/Shanghai（UTC+8），不暴露给用户
+inSession = not na(time(timeframe.period, "0900-2300:1234567", "Asia/Shanghai"))
 
 // ── Signal ──────────────────────────────────────────────────────────────────
 
@@ -333,8 +313,8 @@ alertcondition(sellFilled, title="VWAP PA Sell Filled", message="VWAP PA Brooks:
 stateText  = positionState == 1 ? (isFilled ? "LONG Filled" : "Long Armed") : positionState == -1 ? (isFilled ? "SHORT Filled" : "Short Armed") : "FLAT"
 stateColor = positionState == 1 ? color.new(color.green, 30) : positionState == -1 ? color.new(color.red, 30) : color.new(color.gray, 30)
 trendText  = vwapUp ? "VWAP Up" : vwapDown ? "VWAP Down" : "Flat"
-sessionText  = sessionFilter ? (inSession ? "IN" : "OUT") : "OFF"
-sessionColor = sessionFilter ? (inSession ? color.new(color.green, 30) : color.new(color.maroon, 30)) : color.new(color.gray, 30)
+sessionText  = inSession ? "IN" : "OUT"
+sessionColor = inSession ? color.new(color.green, 30) : color.new(color.maroon, 30)
 
 var table panel = table.new(position.top_right, 2, 4, border_width=1)
 if showPanel and barstate.islast
