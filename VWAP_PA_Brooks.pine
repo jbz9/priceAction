@@ -191,14 +191,6 @@ shouldCancel    = positionState != 0 and not isFilled and not na(barsSinceSignal
 reverseUnlock = confirmed and ((positionState == 1 and isSignalBarSell) or (positionState == -1 and isSignalBarBuy))
 
 shouldReset = hitExit or shouldCancel or reverseUnlock
-if shouldReset
-    positionState := 0
-    signalBarIdx  := na
-    entryPrice    := na
-    slPrice       := na
-    tp1Price      := na
-    tp2Price      := na
-    isFilled      := false
 
 // ── Visualization ───────────────────────────────────────────────────────────
 
@@ -213,9 +205,37 @@ var label buyTP2Label  = na
 var label sellTP1Label = na
 var label sellTP2Label = na
 
-// SL label 单独 var 跟踪（不放入 allLabels），每根 bar 跟随线条末端同步移动
+// SL label 单独 var 跟踪，每根 bar 跟随线条末端同步移动
 var label buySLLabel   = na
 var label sellSLLabel  = na
+
+// reset 时清理所有价格 label，防止孤立浮动（黄金等高波动品种）
+if shouldReset
+    positionState := 0
+    signalBarIdx  := na
+    entryPrice    := na
+    slPrice       := na
+    tp1Price      := na
+    tp2Price      := na
+    isFilled      := false
+    if not na(buySLLabel)
+        label.delete(buySLLabel)
+        buySLLabel := na
+    if not na(sellSLLabel)
+        label.delete(sellSLLabel)
+        sellSLLabel := na
+    if not na(buyTP1Label)
+        label.delete(buyTP1Label)
+        buyTP1Label := na
+    if not na(buyTP2Label)
+        label.delete(buyTP2Label)
+        buyTP2Label := na
+    if not na(sellTP1Label)
+        label.delete(sellTP1Label)
+        sellTP1Label := na
+    if not na(sellTP2Label)
+        label.delete(sellTP2Label)
+        sellTP2Label := na
 
 var label[] allLabels  = array.new<label>()
 var line[]  allSLLines = array.new<line>()
