@@ -93,26 +93,13 @@ f_lineStyle(s) =>
 
 anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-// "仅显示当天"：只画从最后一次 anchor 重置到当前的 VWAP 段
-// 用 var 追踪最后一次 anchor 的 bar_index；
-// Pine 单 pass 执行完后 lastAnchorBarIdx 指向最后段起点。
-// 但历史 bar 执行时该值可能还是旧的 → 用 plot(na) 隐藏。
-// 解法：对每根 bar 检测 "从此 bar 到 last_bar_index 之间有几个 anchor"
-//        → Pine 无法前瞻，但可以用等价条件：
-//        当前 bar 所属的交易日 == last_bar 所属的交易日
-// 用 dayofweek + time 比较改为基于 exchange 时区的日期比较：
-dayOfBarExch = dayofmonth(time, syminfo.timezone)
-dayOfNowExch = dayofmonth(timenow, syminfo.timezone)
-monOfBarExch = month(time, syminfo.timezone)
-monOfNowExch = month(timenow, syminfo.timezone)
-yrOfBarExch  = year(time, syminfo.timezone)
-yrOfNowExch  = year(timenow, syminfo.timezone)
-sameDayExch  = yrOfBarExch == yrOfNowExch and monOfBarExch == monOfNowExch and dayOfBarExch == dayOfNowExch
-
-sameWeek  = math.floor(time / 604800000.0) == math.floor(timenow / 604800000.0)
-sameMonth = yrOfBarExch == yrOfNowExch and monOfBarExch == monOfNowExch
-sameYear  = yrOfBarExch == yrOfNowExch
-inCurrentSegment = timeframe.isintraday ? sameDayExch : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
+// "仅显示当天"：只画当前交易日（= 最后一个 anchor 段）的 VWAP
+// time_tradingday：Pine v5+ 内置变量，同一交易日所有 bar 返回相同值（exchange 日界）
+// 获取"当前交易日"基准：从日线取最新 bar 的 time（= 当前交易日起始 timestamp）
+// 然后比较每根日内 bar 的 time_tradingday 是否 == 这个基准
+currentTradingDayStart = request.security(syminfo.tickerid, "D", time, barmerge.gaps_off, barmerge.lookahead_on)
+inCurrentSegment = timeframe.isintraday ? (time_tradingday == currentTradingDayStart) : true
+// todayOnly=true → 仅当前 anchor 段；false → 全部历史段都画（TV AA 风格）
 isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
 vwapVal = ta.vwap(hlc3, anchorReset)
