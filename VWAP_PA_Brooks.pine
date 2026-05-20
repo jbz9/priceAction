@@ -93,12 +93,11 @@ f_lineStyle(s) =>
 
 anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-// "仅显示当天"：只画当前交易日（= 最后一个 anchor 段）的 VWAP
-// time_tradingday：Pine v5+ 内置变量，同一交易日所有 bar 返回相同值（exchange 日界）
-// 获取"当前交易日"基准：从日线取最新 bar 的 time（= 当前交易日起始 timestamp）
-// 然后比较每根日内 bar 的 time_tradingday 是否 == 这个基准
-currentTradingDayStart = request.security(syminfo.tickerid, "D", time, barmerge.gaps_off, barmerge.lookahead_on)
-inCurrentSegment = timeframe.isintraday ? (time_tradingday == currentTradingDayStart) : true
+// "仅显示当天"：只画最后一个 anchor 段（当前交易日）的 VWAP
+// request.security("D", time, lookahead_on)：在日内 bar 上返回其所属日线 bar 的开盘时间戳
+// 当天所有日内 bar 的 time >= currentDayStart，昨天及之前的 bar < currentDayStart
+currentDayStart = request.security(syminfo.tickerid, "D", time, barmerge.gaps_off, barmerge.lookahead_on)
+inCurrentSegment = timeframe.isintraday ? (time >= currentDayStart) : true
 // todayOnly=true → 仅当前 anchor 段；false → 全部历史段都画（TV AA 风格）
 isInActiveAnchor = todayOnly ? inCurrentSegment : true
 
