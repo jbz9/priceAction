@@ -1,236 +1,111 @@
 //@version=6
-// =============================================================================
-// VWAP PA - Brooks  v1.2  (2026-05)
-// 适用品种 : ES / XAUUSD / NQ 等流动性高的日内品种
-// 适用周期 : 1m / 5m / 15m
-// 状态     : 草稿 → 待回测验证
-//
-// 设计意图:
-//   在 Brooks 价格行为框架下，使用 VWAP（成交量加权均价）作为价格回调的基准。
-//   当价格从一侧回撤至 VWAP 并出现强 PA 信号 K（多头收阳 / 空头收阴），
-//   在信号 K 的下一根 K 线挂止损单入场（Buy Stop / Sell Stop）。
-//
-// 触发流程:
-//   ① VWAP 斜率过滤：多头要求 VWAP 向上，空头要求 VWAP 向下
-//   ② 价格回调触碰 VWAP（当根直接触碰或近 N 根内有触碰记录）
-//   ③ 信号 K 收回 VWAP 上 / 下方，且符合 Brooks 强 K 质量
-//   ④ 信号 K 收盘时绘制 setup（信号 char + SL line + TP1/TP2 line + 1R/2R label）
-//   ⑤ 下一根 K 突破信号 K 高 / 低 → 视为挂单触发；超过 N 根未破 → 撤单失效
-//
-// 与 EMA_PA_Brooks 的区别:
-//   - 趋势过滤    : VWAP 斜率（单线）        vs. EMA20 / 49 双均线
-//   - 入场触发    : 下一根 K 挂止损单         vs. 当前 K close 突破 prev high
-//   - SL/TP 可视化 : line + label（同 EMA 版） vs. line + label
-//
-// 变更日志:
-//   v1.0 (2026-05): 初版
-//     - VWAP anchor 可选 Session / Week / Month
-//     - 信号 K 收盘即画 setup，挂单超时自动撤单
-//     - 状态机：flat → armed → filled → closed，含反向信号解锁
-//   v1.1 (2026-05): 时段过滤
-//     - 新增交易时段过滤：默认覆盖 NY 20:00 → 次日 12:00
-//     - 时区可选 NY / 上海 / 东京 / 伦敦 / 品种所在交易所
-//     - 时段外不识别新信号（已挂单仍可正常触发 / 撤单 / 出场）
-//   v1.2 (2026-05): VWAP 视觉重构 + SL/TP 样式对齐 EMA 版
-//     - 改：移除 VWAP Anchor 选项，固定 Auto（按 timeframe 自适应：日内→Day, D→Week, W→Month）
-//     - 改：仅显示当前活跃 anchor 段（日内 = 今天的 VWAP 段）
-//     - 加：±1σ / ±2σ / ±3σ 标准差带（参考 TV 内置 VWAP Auto Anchored 视觉，默认全部不显示）
-//     - 改：SL/TP 可视化从 box 矩形改为 line + label，与 EMA_PA_Brooks 完全一致
-//     - 改：信号形状去掉「箭头」选项；默认从「箭头」改为「圆形」
-//     - 删：boxWidth / slBoxColor / tp1BoxColor / tp2BoxColor / borderTrans
-//     - 加：tp1Col / tp2Col / tpWidth / tpStyle（命名同 EMA 版）
-//     - 已知缺口: Bar Replay 模式下 timenow 仍取实时，回放历史日不显示当天 VWAP
-//                （信号识别不受影响；仅 VWAP 主线 / 带视觉缺失）
-// =============================================================================
+// VWAP PA - Brooks v1.2 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
+// VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
+// Auto Anchor（日内→Day, D→Week, W→Month）| 仅显示当天 VWAP 段
+// SL/TP: line + label（同 EMA 版）| 信号: ● 圆形
 
-indicator("VWAP PA - Brooks", overlay=true,
-          max_labels_count=500, max_lines_count=500)
+indicator("VWAP PA - Brooks", overlay=true, max_labels_count=500, max_lines_count=500)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Inputs
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Inputs ──────────────────────────────────────────────────────────────────
 
 gr0 = "Signal Logic"
-strictPA        = input.bool (true,  "严格 K 线质量过滤",
-     group=gr0, tooltip="开启后要求信号 K 实体>0.5×range，影线<实体，收盘在强方向 30% 区域")
-slopeFilter     = input.bool (true,  "VWAP 斜率过滤",
-     group=gr0, tooltip="多头要求 VWAP 向上，空头要求 VWAP 向下")
-slopeBars       = input.int  (5,     "VWAP 斜率窗口（K 线数）",      minval=2,
-     group=gr0)
-slopeAtrMul     = input.float(0.05,  "VWAP 斜率最小阈值 ATR 倍数",   minval=0.0, step=0.01,
-     group=gr0, tooltip="|VWAP - VWAP[N]| / ATR 的最小值；过滤横盘中的 VWAP 噪音")
-contactAtrMul   = input.float(0.30,  "回调触碰容忍度 ATR 倍数",      minval=0.0, step=0.05,
-     group=gr0, tooltip="信号 K 与 VWAP 距离 ≤ 该值视为完成回调触碰")
-contactLookback = input.int  (5,     "近 N 根触碰回溯",              minval=1,
-     group=gr0, tooltip="信号 K 当根可未直接触碰，但近 N 根中需有触碰记录")
-maxSignals      = input.int  (5,     "最近显示信号组数",             minval=1,
-     group=gr0)
-lockTimeout     = input.int  (1,     "挂单有效 K 线数",              minval=1,
-     group=gr0, tooltip="信号 K 后 N 根仍未触发即视为失效（默认 1 = 仅下一根）")
+strictPA        = input.bool (true,  "严格 K 线质量过滤", group=gr0, tooltip="实体>0.5×range，影线<实体")
+slopeFilter     = input.bool (true,  "VWAP 斜率过滤", group=gr0)
+slopeBars       = input.int  (5,     "斜率窗口", minval=2, group=gr0)
+slopeAtrMul     = input.float(0.05,  "斜率阈值 ATR 倍数", minval=0.0, step=0.01, group=gr0)
+contactAtrMul   = input.float(0.30,  "触碰容忍度 ATR 倍数", minval=0.0, step=0.05, group=gr0)
+contactLookback = input.int  (5,     "触碰回溯 N 根", minval=1, group=gr0)
+maxSignals      = input.int  (5,     "显示信号组数", minval=1, group=gr0)
+lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr0)
 
-gr1 = "VWAP & Std Dev Bands"
-showVWAP      = input.bool (true,                     "显示 VWAP 主线",
-     group=gr1, tooltip="Anchor 固定 Auto（日内→Day，D→Week，W→Month），仅显示当前活跃段")
-vwapColor     = input.color(color.new(color.blue, 0), "VWAP 主线颜色",        group=gr1)
-vwapWidth     = input.int  (2,                        "VWAP 主线宽度",
-     minval=1, maxval=4, group=gr1)
-showBands     = input.bool (false,                    "显示标准差带 (±σ)",
-     group=gr1, tooltip="参考 TV 内置 VWAP Auto Anchored 视觉，默认不显示")
-band1Mult     = input.float(1.0,                      "±1σ 倍数",
-     minval=0.0, step=0.1, group=gr1)
-band2Mult     = input.float(2.0,                      "±2σ 倍数",
-     minval=0.0, step=0.1, group=gr1)
-band3Mult     = input.float(3.0,                      "±3σ 倍数",
-     minval=0.0, step=0.1, group=gr1)
-bandColor     = input.color(color.new(color.blue, 50),"标准差带基础颜色",
-     group=gr1, tooltip="±1σ 透明度 50，±2σ 70，±3σ 85；填充更淡")
-showBandsFill = input.bool (false,                    "显示带间填充",
-     group=gr1, tooltip="仅在显示标准差带时生效")
+gr1 = "VWAP"
+showVWAP      = input.bool (true, "显示 VWAP", group=gr1)
+vwapColor     = input.color(color.new(color.blue, 0), "颜色", group=gr1)
+vwapWidth     = input.int  (2, "宽度", minval=1, maxval=4, group=gr1)
+showBands     = input.bool (false, "显示 ±σ 带", group=gr1)
+band1Mult     = input.float(1.0, "±1σ", minval=0.0, step=0.1, group=gr1)
+band2Mult     = input.float(2.0, "±2σ", minval=0.0, step=0.1, group=gr1)
+band3Mult     = input.float(3.0, "±3σ", minval=0.0, step=0.1, group=gr1)
+bandColor     = input.color(color.new(color.blue, 50), "带颜色", group=gr1)
+showBandsFill = input.bool (false, "带间填充", group=gr1)
 
 gr2 = "ATR"
 atrLen = input.int(14, "ATR Length", minval=1, group=gr2)
 
 gr3 = "Stop Loss"
-stopMode  = input.string("Signal Bar", "Stop Mode",
-     options=["Signal Bar","Swing Pivot"], group=gr3,
-     tooltip="Signal Bar = 信号 K 高 / 低 ± 1 tick；Swing Pivot = 近 N 根摆动极值")
-swingLook = input.int (5,    "Swing Pivot Lookback", minval=2, group=gr3)
-showSL    = input.bool(true, "显示止损线",                     group=gr3)
+stopMode  = input.string("Signal Bar", "Stop Mode", options=["Signal Bar","Swing Pivot"], group=gr3)
+swingLook = input.int (5, "Swing Lookback", minval=2, group=gr3)
+showSL    = input.bool(true, "显示止损线", group=gr3)
 
-gr4 = "Take Profit Levels (Latest Signal Only)"
-showTP   = input.bool (true,                          "显示止盈线",
-     group=gr4)
-tpRrR1   = input.float(1.0,                           "TP1 R 倍数",
-     minval=0.1, step=0.1, group=gr4)
-tpRrR2   = input.float(2.0,                           "TP2 R 倍数",
-     minval=0.1, step=0.1, group=gr4)
-tp1Col   = input.color(color.new(color.teal, 0),      "1R 颜色",
-     group=gr4)
-tp2Col   = input.color(color.new(color.blue, 0),      "2R 颜色",
-     group=gr4)
-tpWidth  = input.int  (2,                             "线条宽度",
-     minval=1, maxval=4, group=gr4)
-tpStyle  = input.string("Solid",                      "线条样式",
-     options=["Solid","Dashed","Dotted"], group=gr4)
+gr4 = "Take Profit"
+showTP  = input.bool (true, "显示止盈线", group=gr4)
+tpRrR1  = input.float(1.0, "TP1 R 倍数", minval=0.1, step=0.1, group=gr4)
+tpRrR2  = input.float(2.0, "TP2 R 倍数", minval=0.1, step=0.1, group=gr4)
+tp1Col  = input.color(color.new(color.teal, 0), "1R 颜色", group=gr4)
+tp2Col  = input.color(color.new(color.blue, 0), "2R 颜色", group=gr4)
+tpWidth = input.int  (2, "线宽", minval=1, maxval=4, group=gr4)
+tpStyle = input.string("Solid", "线型", options=["Solid","Dashed","Dotted"], group=gr4)
 
 gr5 = "Signal Styling"
-shapeOpt = input.string("圆形",                       "信号形状",
-     options=["圆形","正方形","菱形","十字"], group=gr5)
-sizeOpt  = input.string("中",                         "图形大小",
-     options=["小","中","大","巨大"],         group=gr5)
-bullCol  = input.color (color.green,                  "Buy Color",  group=gr5)
-bearCol  = input.color (color.red,                    "Sell Color", group=gr5)
+sizeOpt = input.string("大", "图形大小", options=["中","大"], group=gr5)
+bullCol = input.color(color.green, "Buy Color", group=gr5)
+bearCol = input.color(color.red, "Sell Color", group=gr5)
 
 grPanel = "Info Panel"
-showPanel = input.bool(true, "显示状态面板", group=grPanel)
+showPanel = input.bool(true, "显示面板", group=grPanel)
 
-gr6 = "Trading Hours Filter"
-sessionFilter = input.bool   (true,
-     "启用时段过滤",
-     group=gr6,
-     tooltip="只在指定时段内识别新信号；时段外仍允许已挂单触发、出场、撤单")
-sessionStr    = input.session("2000-1200:1234567",
-     "交易时段",
-     group=gr6,
-     tooltip="格式 HHMM-HHMM:工作日（1=周日 ... 7=周六）。默认 NY 20:00 → 次日 12:00 ≈ 亚盘开始 → 美盘早盘结束")
-sessionTzOpt  = input.string ("America/New_York",
-     "时段时区",
-     options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"],
-     group=gr6,
-     tooltip="选 'exchange' 则跟随品种所在交易所时区")
+gr6 = "Trading Hours"
+sessionFilter = input.bool(true, "启用时段过滤", group=gr6)
+sessionStr    = input.session("2000-1200:1234567", "时段", group=gr6)
+sessionTzOpt  = input.string("America/New_York", "时区", options=["America/New_York","Asia/Shanghai","Asia/Tokyo","Europe/London","exchange"], group=gr6)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-f_size(opt) =>
+f_sizeVal(opt) =>
     switch opt
-        "小"   => size.small
-        "中"   => size.normal
-        "大"   => size.large
-        "巨大" => size.huge
+        "中" => size.normal
+        "大" => size.large
         => size.normal
 
-get_char(opt) =>
-    switch opt
-        "圆形"   => "●"
-        "正方形" => "■"
-        "菱形"   => "◆"
-        "十字"   => "✚"
-        => "●"
-
-f_tpStyle(s) =>
+f_lineStyle(s) =>
     switch s
         "Solid"  => line.style_solid
         "Dashed" => line.style_dashed
         "Dotted" => line.style_dotted
         =>          line.style_dashed
 
-// VWAP auto anchor: 日内→Day，D→Week，W→Month，M+→Year
-f_autoAnchorReset() =>
-    if timeframe.isintraday
-        timeframe.change("D")
-    else if timeframe.isdaily
-        timeframe.change("W")
-    else if timeframe.isweekly
-        timeframe.change("M")
-    else
-        timeframe.change("12M")
+// ── Data ────────────────────────────────────────────────────────────────────
 
-// 仅显示当前活跃 anchor 段（日内 = 今天的 VWAP 段）
-f_isInActiveAnchor() =>
-    if timeframe.isintraday
-        year(time) == year(timenow) and dayofyear(time) == dayofyear(timenow)
-    else if timeframe.isdaily
-        year(time) == year(timenow) and weekofyear(time) == weekofyear(timenow)
-    else if timeframe.isweekly
-        year(time) == year(timenow) and month(time) == month(timenow)
-    else
-        year(time) == year(timenow)
+anchorReset = timeframe.isintraday ? timeframe.change("D") : timeframe.isdaily ? timeframe.change("W") : timeframe.isweekly ? timeframe.change("M") : timeframe.change("12M")
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. Data
-// ─────────────────────────────────────────────────────────────────────────────
+sameDay   = year(time) == year(timenow) and month(time) == month(timenow) and dayofmonth(time) == dayofmonth(timenow)
+sameWeek  = math.floor(time / 604800000.0) == math.floor(timenow / 604800000.0)
+sameMonth = year(time) == year(timenow) and month(time) == month(timenow)
+sameYear  = year(time) == year(timenow)
+isInActiveAnchor = timeframe.isintraday ? sameDay : timeframe.isdaily ? sameWeek : timeframe.isweekly ? sameMonth : sameYear
 
-anchorReset      = f_autoAnchorReset()
-isInActiveAnchor = f_isInActiveAnchor()
-
-// VWAP 主线 + 三对标准差带（同一 anchor，三个 mult；三次调用返回相同 vwap 中线）
-[vwapVal,  ub1, lb1] = ta.vwap(hlc3, anchorReset, band1Mult)
-[_vwap2,   ub2, lb2] = ta.vwap(hlc3, anchorReset, band2Mult)
-[_vwap3,   ub3, lb3] = ta.vwap(hlc3, anchorReset, band3Mult)
+[vwapVal, ub1, lb1] = ta.vwap(hlc3, anchorReset, band1Mult)
+[_vwap2,  ub2, lb2] = ta.vwap(hlc3, anchorReset, band2Mult)
+[_vwap3,  ub3, lb3] = ta.vwap(hlc3, anchorReset, band3Mult)
 
 atr = ta.atr(atrLen)
 
-// VWAP 主线
-plot(showVWAP and isInActiveAnchor ? vwapVal : na,
-     "VWAP", color=vwapColor, linewidth=vwapWidth)
+plot(showVWAP and isInActiveAnchor ? vwapVal : na, "VWAP", color=vwapColor, linewidth=vwapWidth)
 
-// ±1σ
-ub1Plot = plot(showBands and isInActiveAnchor ? ub1 : na,
-     "+1σ", color=color.new(bandColor, 50), linewidth=1)
-lb1Plot = plot(showBands and isInActiveAnchor ? lb1 : na,
-     "-1σ", color=color.new(bandColor, 50), linewidth=1)
-// ±2σ
-ub2Plot = plot(showBands and isInActiveAnchor ? ub2 : na,
-     "+2σ", color=color.new(bandColor, 70), linewidth=1)
-lb2Plot = plot(showBands and isInActiveAnchor ? lb2 : na,
-     "-2σ", color=color.new(bandColor, 70), linewidth=1)
-// ±3σ
-ub3Plot = plot(showBands and isInActiveAnchor ? ub3 : na,
-     "+3σ", color=color.new(bandColor, 85), linewidth=1)
-lb3Plot = plot(showBands and isInActiveAnchor ? lb3 : na,
-     "-3σ", color=color.new(bandColor, 85), linewidth=1)
+ub1Plot = plot(showBands and isInActiveAnchor ? ub1 : na, "+1σ", color=color.new(bandColor, 50), linewidth=1)
+lb1Plot = plot(showBands and isInActiveAnchor ? lb1 : na, "-1σ", color=color.new(bandColor, 50), linewidth=1)
+ub2Plot = plot(showBands and isInActiveAnchor ? ub2 : na, "+2σ", color=color.new(bandColor, 70), linewidth=1)
+lb2Plot = plot(showBands and isInActiveAnchor ? lb2 : na, "-2σ", color=color.new(bandColor, 70), linewidth=1)
+ub3Plot = plot(showBands and isInActiveAnchor ? ub3 : na, "+3σ", color=color.new(bandColor, 85), linewidth=1)
+lb3Plot = plot(showBands and isInActiveAnchor ? lb3 : na, "-3σ", color=color.new(bandColor, 85), linewidth=1)
 
-fill(ub1Plot, lb1Plot, color=showBandsFill and showBands ? color.new(bandColor, 92) : na, title="±1σ Fill")
-fill(ub2Plot, ub1Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na, title="+1σ→+2σ Fill")
-fill(lb1Plot, lb2Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na, title="-1σ→-2σ Fill")
-fill(ub3Plot, ub2Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na, title="+2σ→+3σ Fill")
-fill(lb2Plot, lb3Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na, title="-2σ→-3σ Fill")
+fill(ub1Plot, lb1Plot, color=showBandsFill and showBands ? color.new(bandColor, 92) : na)
+fill(ub2Plot, ub1Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na)
+fill(lb1Plot, lb2Plot, color=showBandsFill and showBands ? color.new(bandColor, 95) : na)
+fill(ub3Plot, ub2Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na)
+fill(lb2Plot, lb3Plot, color=showBandsFill and showBands ? color.new(bandColor, 97) : na)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. Mid calcs
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Calcs ───────────────────────────────────────────────────────────────────
 
 vwapSlopeRaw = atr > 0 and not na(vwapVal[slopeBars]) ? (vwapVal - vwapVal[slopeBars]) / atr : 0.0
 vwapUp   = slopeFilter ? vwapSlopeRaw >  slopeAtrMul : true
@@ -249,15 +124,11 @@ qBear = validRange and bodySize > barRange * 0.5 and lowerTail < bodySize and cl
 isBullSig = strictPA ? (close > open and qBull) : (close > open)
 isBearSig = strictPA ? (close < open and qBear) : (close < open)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. Context: VWAP contact (回调企稳判定)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── VWAP Contact ────────────────────────────────────────────────────────────
 
-// 7.1 当根直接触碰
 buyContactNow  = low  <= vwapVal + atr * contactAtrMul and close > vwapVal
 sellContactNow = high >= vwapVal - atr * contactAtrMul and close < vwapVal
 
-// 7.2 近 N 根历史触碰
 barsSinceLowBelow  = ta.barssince(low  <= vwapVal)
 barsSinceHighAbove = ta.barssince(high >= vwapVal)
 
@@ -267,25 +138,18 @@ priorSellContact = not na(barsSinceHighAbove) and barsSinceHighAbove >= 1 and ba
 vwapContactBuy  = buyContactNow  or priorBuyContact
 vwapContactSell = sellContactNow or priorSellContact
 
-// 7.3 交易时段过滤（默认 NY 20:00 → 次日 12:00，覆盖亚盘开始到美盘早盘结束）
 sessionTz = sessionTzOpt == "exchange" ? syminfo.timezone : sessionTzOpt
 inSession = sessionFilter ? not na(time(timeframe.period, sessionStr, sessionTz)) : true
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. Signal detection
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Signal ──────────────────────────────────────────────────────────────────
 
 isSignalBarBuy  = vwapUp   and vwapContactBuy  and isBullSig
 isSignalBarSell = vwapDown and vwapContactSell and isBearSig
 
 confirmed = barstate.isconfirmed
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. Risk / Entry / State machine
-// ─────────────────────────────────────────────────────────────────────────────
+// ── State Machine ───────────────────────────────────────────────────────────
 
-// 状态: 0 = flat（无信号）, 1 = armed long, -1 = armed short
-//       挂单触发后 isFilled := true，仍保留 positionState 直到 SL / TP 命中
 var int   positionState = 0
 var int   signalBarIdx  = na
 var float entryPrice    = na
@@ -294,11 +158,9 @@ var float tp1Price      = na
 var float tp2Price      = na
 var bool  isFilled      = false
 
-// 仅 confirmed bar 触发新信号；要求当前为 flat 状态 + 在交易时段内
 buySig  = confirmed and isSignalBarBuy  and positionState == 0 and inSession
 sellSig = confirmed and isSignalBarSell and positionState == 0 and inSession
 
-// Stop 计算源
 swingBuyStop  = ta.lowest (low,  swingLook)
 swingSellStop = ta.highest(high, swingLook)
 
@@ -306,8 +168,7 @@ if buySig
     positionState := 1
     signalBarIdx  := bar_index
     entryPrice    := high + syminfo.mintick
-    slPrice       := stopMode == "Signal Bar" ? low - syminfo.mintick
-                                              : math.min(low, swingBuyStop) - syminfo.mintick
+    slPrice       := stopMode == "Signal Bar" ? low - syminfo.mintick : math.min(low, swingBuyStop) - syminfo.mintick
     float riskR   = entryPrice - slPrice
     tp1Price      := entryPrice + riskR * tpRrR1
     tp2Price      := entryPrice + riskR * tpRrR2
@@ -317,24 +178,20 @@ if sellSig
     positionState := -1
     signalBarIdx  := bar_index
     entryPrice    := low - syminfo.mintick
-    slPrice       := stopMode == "Signal Bar" ? high + syminfo.mintick
-                                              : math.max(high, swingSellStop) + syminfo.mintick
+    slPrice       := stopMode == "Signal Bar" ? high + syminfo.mintick : math.max(high, swingSellStop) + syminfo.mintick
     float riskR   = slPrice - entryPrice
     tp1Price      := entryPrice - riskR * tpRrR1
     tp2Price      := entryPrice - riskR * tpRrR2
     isFilled      := false
 
-// 触发 / 出场 / 撤单管理（仅在信号 K 之后的 K 线生效）
 canManage = positionState != 0 and not na(signalBarIdx) and bar_index > signalBarIdx
 
-// 9.1 挂单触发（突破信号 K 高 / 低）
 if canManage and not isFilled
     if positionState == 1 and high >= entryPrice
         isFilled := true
     if positionState == -1 and low <= entryPrice
         isFilled := true
 
-// 9.2 已触发：检查 SL / TP2 命中后退出
 if canManage and isFilled
     if positionState == 1 and (low <= slPrice or high >= tp2Price)
         positionState := 0
@@ -353,7 +210,6 @@ if canManage and isFilled
         tp2Price      := na
         isFilled      := false
 
-// 9.3 未触发 + 超时 → 撤单
 barsSinceSignal = na(signalBarIdx) ? na : bar_index - signalBarIdx
 shouldCancel    = positionState != 0 and not isFilled and not na(barsSinceSignal) and barsSinceSignal >= lockTimeout
 if shouldCancel
@@ -365,10 +221,7 @@ if shouldCancel
     tp2Price      := na
     isFilled      := false
 
-// 9.4 反向信号解锁（避免方向已反转仍被旧信号锁住）
-reverseUnlockLong  = positionState ==  1 and isSignalBarSell
-reverseUnlockShort = positionState == -1 and isSignalBarBuy
-reverseUnlock      = confirmed and (reverseUnlockLong or reverseUnlockShort)
+reverseUnlock = confirmed and ((positionState == 1 and isSignalBarSell) or (positionState == -1 and isSignalBarBuy))
 if reverseUnlock
     positionState := 0
     signalBarIdx  := na
@@ -378,11 +231,8 @@ if reverseUnlock
     tp2Price      := na
     isFilled      := false
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 10. Visualization (line + label, 风格对齐 EMA_PA_Brooks)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Visualization ───────────────────────────────────────────────────────────
 
-// 当前活跃 SL / TP line 与 label 引用（多空各一组）
 var line  buySLLine    = na
 var line  sellSLLine   = na
 var line  buyTP1Line   = na
@@ -394,7 +244,6 @@ var label buyTP2Label  = na
 var label sellTP1Label = na
 var label sellTP2Label = na
 
-// 历史保留：信号 char 与 Stop label 通过数组限流；SL line 同样限流
 var label[] allLabels  = array.new<label>()
 var line[]  allSLLines = array.new<line>()
 
@@ -416,21 +265,12 @@ f_deleteLabel(lb) =>
     if not na(lb)
         label.delete(lb)
 
-// 多头 setup 画图
 if buySig
-    // 信号 char
-    f_pushLabel(label.new(bar_index, low, get_char(shapeOpt),
-                          style=label.style_none, textcolor=bullCol,
-                          size=f_size(sizeOpt), yloc=yloc.belowbar))
-    // SL line + Stop label
+    f_pushLabel(label.new(bar_index, low, "●", style=label.style_none, textcolor=bullCol, size=f_sizeVal(sizeOpt), yloc=yloc.belowbar))
     if showSL and not na(slPrice)
-        buySLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice,
-                              color=color.red, width=tpWidth, style=f_tpStyle(tpStyle))
+        buySLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle))
         f_pushSLLine(buySLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "Stop",
-                              style=label.style_none, textcolor=color.red,
-                              size=size.small, yloc=yloc.price))
-    // TP lines + labels（每次新信号删除上一组，仅保留最新）
+        f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -444,30 +284,17 @@ if buySig
         sellTP2Line  := na
         sellTP1Label := na
         sellTP2Label := na
+        buyTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
+        buyTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
+        buyTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        buyTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
-        buyTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price,
-                                color=tp1Col, width=tpWidth, style=f_tpStyle(tpStyle))
-        buyTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price,
-                                color=tp2Col, width=tpWidth, style=f_tpStyle(tpStyle))
-        buyTP1Label := label.new(bar_index, tp1Price, "1R",
-                                 style=label.style_none, textcolor=tp1Col,
-                                 size=size.small, yloc=yloc.price)
-        buyTP2Label := label.new(bar_index, tp2Price, "2R",
-                                 style=label.style_none, textcolor=tp2Col,
-                                 size=size.small, yloc=yloc.price)
-
-// 空头 setup 画图
 if sellSig
-    f_pushLabel(label.new(bar_index, high, get_char(shapeOpt),
-                          style=label.style_none, textcolor=bearCol,
-                          size=f_size(sizeOpt), yloc=yloc.abovebar))
+    f_pushLabel(label.new(bar_index, high, "●", style=label.style_none, textcolor=bearCol, size=f_sizeVal(sizeOpt), yloc=yloc.abovebar))
     if showSL and not na(slPrice)
-        sellSLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice,
-                               color=color.red, width=tpWidth, style=f_tpStyle(tpStyle))
+        sellSLLine := line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle))
         f_pushSLLine(sellSLLine)
-        f_pushLabel(label.new(bar_index, slPrice, "Stop",
-                              style=label.style_none, textcolor=color.red,
-                              size=size.small, yloc=yloc.price))
+        f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
         f_deleteLine(buyTP1Line)
         f_deleteLine(buyTP2Line)
@@ -481,19 +308,11 @@ if sellSig
         buyTP2Line  := na
         buyTP1Label := na
         buyTP2Label := na
+        sellTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
+        sellTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
+        sellTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
+        sellTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
 
-        sellTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price,
-                                 color=tp1Col, width=tpWidth, style=f_tpStyle(tpStyle))
-        sellTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price,
-                                 color=tp2Col, width=tpWidth, style=f_tpStyle(tpStyle))
-        sellTP1Label := label.new(bar_index, tp1Price, "1R",
-                                  style=label.style_none, textcolor=tp1Col,
-                                  size=size.small, yloc=yloc.price)
-        sellTP2Label := label.new(bar_index, tp2Price, "2R",
-                                  style=label.style_none, textcolor=tp2Col,
-                                  size=size.small, yloc=yloc.price)
-
-// 持仓期间延伸 active line 到当前 bar；状态归零后停止延伸（线条冻结于最后位置）
 if positionState == 1
     if not na(buySLLine)
         line.set_x2(buySLLine, bar_index)
@@ -512,62 +331,33 @@ if positionState == -1
         if not na(sellTP2Line)
             line.set_x2(sellTP2Line, bar_index)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 11. Alert conditions
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Alerts ──────────────────────────────────────────────────────────────────
 
-alertcondition(buySig,  title="VWAP PA Buy Setup",
-     message="VWAP PA Brooks: BUY setup detected — place Buy Stop @ signal high + 1 tick on next bar")
-alertcondition(sellSig, title="VWAP PA Sell Setup",
-     message="VWAP PA Brooks: SELL setup detected — place Sell Stop @ signal low - 1 tick on next bar")
+alertcondition(buySig,  title="VWAP PA Buy Setup",  message="VWAP PA Brooks: BUY setup")
+alertcondition(sellSig, title="VWAP PA Sell Setup", message="VWAP PA Brooks: SELL setup")
 
-buyFilled  = confirmed and positionState ==  1 and isFilled and not nz(isFilled[1], false)
-sellFilled = confirmed and positionState == -1 and isFilled and not nz(isFilled[1], false)
-alertcondition(buyFilled,  title="VWAP PA Buy Filled",
-     message="VWAP PA Brooks: Buy Stop FILLED")
-alertcondition(sellFilled, title="VWAP PA Sell Filled",
-     message="VWAP PA Brooks: Sell Stop FILLED")
+var bool isFilledPrev = false
+buyFilled  = confirmed and positionState ==  1 and isFilled and not isFilledPrev
+sellFilled = confirmed and positionState == -1 and isFilled and not isFilledPrev
+isFilledPrev := isFilled
+alertcondition(buyFilled,  title="VWAP PA Buy Filled",  message="VWAP PA Brooks: Buy Stop FILLED")
+alertcondition(sellFilled, title="VWAP PA Sell Filled", message="VWAP PA Brooks: Sell Stop FILLED")
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 12. Info panel
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Panel ───────────────────────────────────────────────────────────────────
 
-f_stateText() =>
-    s = "?"
-    if positionState == 0
-        s := "FLAT / Waiting"
-    if positionState == 1
-        s := isFilled ? "LONG Filled"  : "Long Armed (waiting fill)"
-    if positionState == -1
-        s := isFilled ? "SHORT Filled" : "Short Armed (waiting fill)"
-    s
-
-f_stateColor() =>
-    c = color.new(color.gray, 30)
-    if positionState == 1
-        c := color.new(color.green, 30)
-    if positionState == -1
-        c := color.new(color.red, 30)
-    c
-
-f_trendText() =>
-    vwapUp ? "VWAP Up" : vwapDown ? "VWAP Down" : "VWAP Flat / Filtered"
-
-stateText  = f_stateText()
-stateColor = f_stateColor()
-trendText  = f_trendText()
-
-sessionText  = sessionFilter ? (inSession ? "IN session" : "OUT of session") : "Filter OFF"
+stateText  = positionState == 1 ? (isFilled ? "LONG Filled" : "Long Armed") : positionState == -1 ? (isFilled ? "SHORT Filled" : "Short Armed") : "FLAT"
+stateColor = positionState == 1 ? color.new(color.green, 30) : positionState == -1 ? color.new(color.red, 30) : color.new(color.gray, 30)
+trendText  = vwapUp ? "VWAP Up" : vwapDown ? "VWAP Down" : "Flat"
+sessionText  = sessionFilter ? (inSession ? "IN" : "OUT") : "OFF"
 sessionColor = sessionFilter ? (inSession ? color.new(color.green, 30) : color.new(color.maroon, 30)) : color.new(color.gray, 30)
 
 var table panel = table.new(position.top_right, 2, 4, border_width=1)
 if showPanel and barstate.islast
-    table.cell(panel, 0, 0, "Trend", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(panel, 0, 0, "Trend",   text_color=color.white, bgcolor=color.new(color.gray, 50))
     table.cell(panel, 1, 0, trendText, text_color=color.white, bgcolor=color.new(color.gray, 30))
-    table.cell(panel, 0, 1, "State", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(panel, 0, 1, "State",   text_color=color.white, bgcolor=color.new(color.gray, 50))
     table.cell(panel, 1, 1, stateText, text_color=color.white, bgcolor=stateColor)
     table.cell(panel, 0, 2, "Session", text_color=color.white, bgcolor=color.new(color.gray, 50))
     table.cell(panel, 1, 2, sessionText, text_color=color.white, bgcolor=sessionColor)
-    table.cell(panel, 0, 3, "Slope/ATR", text_color=color.white, bgcolor=color.new(color.gray, 50))
-    table.cell(panel, 1, 3, str.tostring(vwapSlopeRaw, "#.###"),
-               text_color=color.white, bgcolor=color.new(color.gray, 30))
+    table.cell(panel, 0, 3, "Slope",   text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(panel, 1, 3, str.tostring(vwapSlopeRaw, "#.###"), text_color=color.white, bgcolor=color.new(color.gray, 30))
