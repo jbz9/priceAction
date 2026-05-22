@@ -1,5 +1,5 @@
 //@version=6
-// VWAP PA - Brooks v1.5 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
+// VWAP PA - Brooks v1.6 (2026-05) | ES/XAUUSD/NQ | 1m/5m/15m
 // VWAP 回调 + Brooks 强 K → 下一根挂止损单入场
 // Auto Anchor（日内→Day, D→Week, W→Month）
 // SL/TP: line + label | 信号: ● 圆形
@@ -10,9 +10,12 @@
 // - 反向信号 reverseUnlock 不受 session 限制，清除当前状态后允许下一根 K 线反向开仓
 //
 // 已知风险：
-// - 信号 ● 标签与 Stop 标签共用 allLabels 数组，maxSignals 在 showSL on/off 时实际上限不同
+// - allLabels 上限按 maxSignals*4 设置（覆盖 ●/Stop/TP1L/TP2L 四类），当 showSL/showTP 关闭时上限会更宽松
 //
 // 变更日志：
+// v1.6 (2026-05):
+//   - 新增【显示历史信号】开关（默认关闭）：关闭时每次新信号清空全部历史，图上仅留最新一组
+//   - 历史 TP 线/标签不再被新信号主动删除：与 SL 一致，统一受 maxSignals 上限管理（开启历史显示时）
 // v1.5 (2026-05):
 //   - K 线质量标准从 close>50% 提升至 close>=70%（Brooks 强 K 定义）
 //   - reverseUnlock 注释修正：清状态后允许下一根反向开仓（非"不开新仓"）
@@ -36,7 +39,8 @@ slopeBars       = input.int  (5,     "斜率窗口", minval=2, group=gr0)
 slopeAtrMul     = input.float(0.05,  "斜率阈值 ATR 倍数", minval=0.0, step=0.01, group=gr0)
 contactAtrMul   = input.float(0.30,  "触碰容忍度 ATR 倍数", minval=0.0, step=0.05, group=gr0)
 contactLookback = input.int  (5,     "触碰回溯 N 根", minval=1, group=gr0)
-maxSignals      = input.int  (5,     "显示信号组数", minval=1, group=gr0)
+showHistorySignals = input.bool(false, "显示历史信号", group=gr0, tooltip="关闭：仅显示最新一组信号（●/SL/TP）；开启：保留最近 N 组历史信号")
+maxSignals      = input.int  (5,     "显示信号组数", minval=1, group=gr0, tooltip="仅在【显示历史信号】开启时生效")
 lockTimeout     = input.int  (1,     "挂单有效 K 线数", minval=1, group=gr0)
 
 gr1 = "VWAP"
@@ -216,16 +220,32 @@ if shouldReset
 
 var label[] allLabels  = array.new<label>()
 var line[]  allSLLines = array.new<line>()
+var line[]  allTPLines = array.new<line>()
 
 f_pushLabel(_lb) =>
     array.push(allLabels, _lb)
-    if array.size(allLabels) > maxSignals * 2
+    // 一组信号最多 4 个 label：● + Stop + TP1 + TP2
+    if array.size(allLabels) > maxSignals * 4
         label.delete(array.shift(allLabels))
 
 f_pushSLLine(_ln) =>
     array.push(allSLLines, _ln)
     if array.size(allSLLines) > maxSignals
         line.delete(array.shift(allSLLines))
+
+f_pushTPLine(_ln) =>
+    array.push(allTPLines, _ln)
+    // 一组信号 2 条 TP 线（TP1 + TP2）
+    if array.size(allTPLines) > maxSignals * 2
+        line.delete(array.shift(allTPLines))
+
+f_clearAll() =>
+    while array.size(allLabels) > 0
+        label.delete(array.shift(allLabels))
+    while array.size(allSLLines) > 0
+        line.delete(array.shift(allSLLines))
+    while array.size(allTPLines) > 0
+        line.delete(array.shift(allTPLines))
 
 f_deleteLine(ln) =>
     if not na(ln)
@@ -236,52 +256,42 @@ f_deleteLabel(lb) =>
         label.delete(lb)
 
 if buySig
+    if not showHistorySignals
+        f_clearAll()
     f_pushLabel(label.new(bar_index, low, "●", style=label.style_none, textcolor=bullCol, size=f_sizeVal(sizeOpt), yloc=yloc.price))
     buySLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(buySLLine)
         f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
-        f_deleteLine(buyTP1Line)
-        f_deleteLine(buyTP2Line)
-        f_deleteLine(sellTP1Line)
-        f_deleteLine(sellTP2Line)
-        f_deleteLabel(buyTP1Label)
-        f_deleteLabel(buyTP2Label)
-        f_deleteLabel(sellTP1Label)
-        f_deleteLabel(sellTP2Label)
-        sellTP1Line  := na
-        sellTP2Line  := na
-        sellTP1Label := na
-        sellTP2Label := na
+        // 历史 TP 线/标签不再主动删除，统一受 allTPLines / allLabels 上限管理
         buyTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         buyTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
         buyTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
         buyTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        f_pushTPLine(buyTP1Line)
+        f_pushTPLine(buyTP2Line)
+        f_pushLabel(buyTP1Label)
+        f_pushLabel(buyTP2Label)
 
 if sellSig
+    if not showHistorySignals
+        f_clearAll()
     f_pushLabel(label.new(bar_index, high, "●", style=label.style_none, textcolor=bearCol, size=f_sizeVal(sizeOpt), yloc=yloc.price))
     sellSLLine := showSL and not na(slPrice) ? line.new(bar_index, slPrice, bar_index + 1, slPrice, color=color.red, width=tpWidth, style=f_lineStyle(tpStyle)) : na
     if showSL and not na(slPrice)
         f_pushSLLine(sellSLLine)
         f_pushLabel(label.new(bar_index, slPrice, "Stop", style=label.style_none, textcolor=color.red, size=size.small, yloc=yloc.price))
     if showTP and not na(tp1Price) and not na(tp2Price)
-        f_deleteLine(buyTP1Line)
-        f_deleteLine(buyTP2Line)
-        f_deleteLine(sellTP1Line)
-        f_deleteLine(sellTP2Line)
-        f_deleteLabel(buyTP1Label)
-        f_deleteLabel(buyTP2Label)
-        f_deleteLabel(sellTP1Label)
-        f_deleteLabel(sellTP2Label)
-        buyTP1Line  := na
-        buyTP2Line  := na
-        buyTP1Label := na
-        buyTP2Label := na
+        // 历史 TP 线/标签不再主动删除，统一受 allTPLines / allLabels 上限管理
         sellTP1Line  := line.new(bar_index, tp1Price, bar_index + 1, tp1Price, color=tp1Col, width=tpWidth, style=f_lineStyle(tpStyle))
         sellTP2Line  := line.new(bar_index, tp2Price, bar_index + 1, tp2Price, color=tp2Col, width=tpWidth, style=f_lineStyle(tpStyle))
         sellTP1Label := label.new(bar_index, tp1Price, "1R", style=label.style_none, textcolor=tp1Col, size=size.small, yloc=yloc.price)
         sellTP2Label := label.new(bar_index, tp2Price, "2R", style=label.style_none, textcolor=tp2Col, size=size.small, yloc=yloc.price)
+        f_pushTPLine(sellTP1Line)
+        f_pushTPLine(sellTP2Line)
+        f_pushLabel(sellTP1Label)
+        f_pushLabel(sellTP2Label)
 
 if positionState == 1
     if not na(buySLLine)
