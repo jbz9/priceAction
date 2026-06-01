@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-05-31T15:00:00.000Z" agent="kiro" version="22.0.0" type="device">
+  <diagram name="27-day-types-matrix" id="dayTypes">
+    <mxGraphModel dx="2400" dy="1300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="27 种日内 Day Type 完整矩阵图&#xa;预期看跌前提下, Asia × London × NY = 3³ = 27 种走法" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="500" y="20" width="1300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="🟩 绿灯 (符合预期, 入场)  🟨 黄灯 (混合, 谨慎/小仓)  🟥 红灯 (不符合, 不交易)  ★★★ 高质量主力做空日" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=14;fillColor=#f5f5f5;strokeColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="450" y="90" width="1400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-header" value="Asia = D (顺势下跌)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5d4;strokeColor=#28a745;strokeWidth=3;fontSize=18;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="140" width="700" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-h-l" value="London \ NY" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="60" y="200" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-h-nd" value="NY = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="160" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-h-nr" value="NY = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="360" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-h-nu" value="NY = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="560" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-rh-d" value="L = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="60" y="240" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" value="#1 DDD&#xa;TFO Down&#xa;★绿灯  100% 持有" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a8e6b3;strokeColor=#1e7e34;strokeWidth=2;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="160" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="#2 DDR&#xa;Trend then Stall&#xa;✅绿灯  100% TP1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="360" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="#3 DDU&#xa;Late Reversal&#xa;⚠️黄灯  NY 平" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="560" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-rh-r" value="L = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="60" y="340" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" value="#4 DRD ★★★&#xa;Pullback Trend&#xa;★绿灯  100% L2 入场" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a8e6b3;strokeColor=#1e7e34;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="160" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" value="#5 DRR&#xa;Half Trend Early&#xa;✅绿灯  70% Asia 入" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="360" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" value="#6 DRU&#xa;Failed Trend&#xa;⚠️黄灯  NY 平" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="560" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ad-rh-u" value="L = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n7" value="#7 DUD ★★★&#xa;W-Bottom Day&#xa;★绿灯  100% L2 入场" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a8e6b3;strokeColor=#1e7e34;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="160" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n8" value="#8 DUR&#xa;Trend-Reversal-Stall&#xa;⚠️黄灯  30% 谨慎" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="360" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n9" value="#9 DUU&#xa;Major Reversal Up&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="560" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-header" value="Asia = R (横盘震荡)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8e1;strokeColor=#856404;strokeWidth=3;fontSize=18;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="780" y="140" width="700" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-h-l" value="London \ NY" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="780" y="200" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-h-nd" value="NY = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="880" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-h-nr" value="NY = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1080" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-h-nu" value="NY = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1280" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-rh-d" value="L = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="780" y="240" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n10" value="#10 RDD&#xa;Late Trend Down&#xa;✅绿灯  70% London 入" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="880" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n11" value="#11 RDR&#xa;Middle Trend Stall&#xa;⚠️黄灯  30% 难做" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1080" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n12" value="#12 RDU&#xa;Whipsaw Day&#xa;⚠️黄灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1280" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-rh-r" value="L = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="780" y="340" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n13" value="#13 RRD&#xa;NY-Only Trend Down&#xa;✅绿灯  50% NY 入" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4edda;strokeColor=#28a745;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="880" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n14" value="#14 RRR ★★&#xa;Tight TR Day&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#990000;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1080" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n15" value="#15 RRU&#xa;NY Reversal Up&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1280" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ar-rh-u" value="L = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="780" y="440" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n16" value="#16 RUD&#xa;False Reversal&#xa;⚠️黄灯  30%" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="880" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n17" value="#17 RUR&#xa;Mid-day Bull Stall&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1080" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n18" value="#18 RUU&#xa;Late Bull Day&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1280" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="au-header" value="Asia = U (反弹 / 反转)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4e4;strokeColor=#b85450;strokeWidth=3;fontSize=18;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1500" y="140" width="700" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="au-h-l" value="London \ NY" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="1500" y="200" width="100" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="au-h-nd" value="NY = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1600" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="au-h-nr" value="NY = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1800" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="au-h-nu" value="NY = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="2000" y="200" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="au-rh-d" value="L = D" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1500" y="240" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n19" value="#19 UDD ★★★&#xa;Major Reversal Down&#xa;★绿灯  100% L2 入场" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a8e6b3;strokeColor=#1e7e34;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1600" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n20" value="#20 UDR&#xa;Reversal-Trend-Stall&#xa;⚠️黄灯  30% 谨慎" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1800" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n21" value="#21 UDU&#xa;Triple Whipsaw&#xa;⚠️黄灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="2000" y="240" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="au-rh-r" value="L = R" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1500" y="340" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n22" value="#22 URD&#xa;Late Day Down&#xa;⚠️黄灯  50% NY 入" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3cd;strokeColor=#856404;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1600" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n23" value="#23 URR&#xa;Asia-Only Move&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1800" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n24" value="#24 URU&#xa;Pullback Trend Up&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="2000" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="au-rh-u" value="L = U" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;fillColor=#e8e8e8" vertex="1" parent="1">
+          <mxGeometry x="1500" y="440" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n25" value="#25 UUD&#xa;Bull then Reversal&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1600" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n26" value="#26 UUR&#xa;Half Bull Day&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1800" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="n27" value="#27 UUU&#xa;TFO Up&#xa;🛑红灯  不交易" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="2000" y="440" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="footer" value="📌 关键统计:  8 绿灯日 (30%) + 10 黄灯日 (37%) + 9 红灯日 (33%)&#xa;★★★ 三大主力做空日:  #4 DRD (Pullback Trend) / #7 DUD (W-Bottom) / #19 UDD (Major Reversal Down)&#xa;🛑 唯一不交易日:  #14 RRR (Tight Trading Range) — 全天横盘, 业余亏损率最高的一天" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=12;fontStyle=2;fillColor=#fafafa;strokeColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="200" y="580" width="2000" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
